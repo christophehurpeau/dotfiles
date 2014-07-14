@@ -1,0 +1,19 @@
+[user]
+    name = Christophe Hurpeau
+    email = christophe@hurpeau.com
+[push]
+    default = simple
+
+[core]
+    editor = subl -w
+[web]
+    browser = firefox
+[diff]
+    tool = meld
+[difftool]
+    prompt = false
+
+[alias]
+  l = log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+
+
