@@ -1,19 +1,43 @@
 [user]
     name = Christophe Hurpeau
     email = christophe@hurpeau.com
+
 [push]
     default = simple
 
 [core]
-    editor = subl -w
+    editor = nano
+
 [web]
     browser = firefox
+
+[color]
+  ui = auto # covers diff = true, status = auto, branch = auto
+  interactive = auto
+
+[pager]
+    diff = false
+
 [diff]
     tool = meld
+
 [difftool]
     prompt = false
 
+[branch]
+    autosetuprebase = always
+
 [alias]
-  l = log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --no-pager -15
-
-
+    alias = !git config --list | grep 'alias\\.' | sed 's/alias\\.\\([^=]*\\)=\\(.*\\)/\\1\\\t => \\2/' | sort
+    co = checkout
+    st = status --short --branch
+    l = !git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit -15 && echo ''
+    d = diff --minimal --word-diff=color
+    amend = commit --amend
+    add-A = add -A
+    commit-a = commit -a
+    unstage = reset HEAD
+    backup = push --mirror backup
+    stash-and-pull = !git stash && git pull && git stash pop
+    edit-unmerged = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; editor `f`"
+    add-unmerged = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; git add `f`"
