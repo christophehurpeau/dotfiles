@@ -7,6 +7,8 @@
 
 [core]
     editor = nano
+	whitespace = trailing-space,space-before-tab,indent-with-non-tab
+	excludesfile = ~/config-gitted/.gitignore
 
 [web]
     browser = firefox
@@ -41,3 +43,5 @@
     stash-and-pull = !git stash && git pull && git stash pop
     edit-unmerged = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; editor `f`"
     add-unmerged = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; git add `f`"
+[merge]
+	stat = true
