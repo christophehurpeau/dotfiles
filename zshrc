@@ -151,12 +151,12 @@ repositoryStatus() {
         marks="${marks}%{$fg_bold[red]↓$reset_color%}"
     fi
 
-    echo -n " %{$fg_bold[blue]%}["
+    echo -n " %{$fg_bold[green]%}["
     echo -n "$branch$(parse_git_dirty) $stats"
     if [[ -n "$marks" ]] ; then
         echo -n " $marks"
     fi
-    echo -n "%{$fg_bold[blue]%}]%{$reset_color%}"
+    echo -n "%{$fg_bold[green]%}]%{$reset_color%}"
 }
 
 
@@ -219,7 +219,7 @@ prompt_first_line () {
         _zsh_last_current_directory="$current_directory"
 
         if [ "$color_prompt" = yes ]; then
-            echo "$PROMPT_FIRST_LINE$(disk_color)$(pwd)$reset_color"
+                echo "$PROMPT_FIRST_LINE$(disk_color)$(pwd)$reset_color"
         else
             echo "$PROMPT_FIRST_LINE$(pwd)"
         fi
@@ -251,10 +251,12 @@ PROMPT=""
 if [ "$color_prompt" = yes ]; then
     # Time of day (with load info):
     PROMPT=${PROMPT}"%{\$(load_color)%}%*%{$reset_color%}"
+    # Folder name
+    PROMPT=${PROMPT}" %{\$(disk_color)%}%C%{$reset_color%}"
     # Repository status
     PROMPT=${PROMPT}"\$(repositoryStatus)"
     # Prompt (with 'job' info):
     PROMPT=${PROMPT}" %{\$(job_color)%}\$%{$reset_color%} "
 else
-    PROMPT=${PROMPT}"%* \$ "
+    PROMPT=${PROMPT}"%* %C \$ "
 fi
