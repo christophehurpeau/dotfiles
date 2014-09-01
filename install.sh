@@ -2,6 +2,7 @@
 
 git clone git@github.com:christophehurpeau/config-gitted.git ~/config-gitted/
 ln -s ~/config-gitted/gitconfig ~/.gitconfig
+ln -s ~/config-gitted/Preferences.sublime-settings ~/.config/sublime-text-3/Packages/User/Preferences.sublime-settings
 echo 'source ~/config-gitted/bashrc' >> ~/.bashrc
 echo 'source ~/config-gitted/zshrc' >> ~/.zshrc
 echo 'source ~/config-gitted/bash_aliases' >> ~/.aliases
