@@ -1,23 +1,31 @@
 {
 	"color_scheme": "Packages/User/GrandsonOfObsidian (SL).tmTheme",
-    "detect_indentation": false,
-    "font_size": 10,
-    "word_separators": "./\\()\"'-:,.;<>~!@#$%^&*|+=[]{}`~?_",
-    "tab_size": 4,
-    "translate_tabs_to_spaces": true,
-    "highlight_line": true,
-    "ensure_newline_at_eof_on_save": true,
+    "theme": "Soda Dark.sublime-theme",
+	"copy_with_empty_selection": false,
 	"default_line_ending": "LF",
-    "shift_tab_unindent": true,
-    "copy_with_empty_selection": false,
-    "highlight_modified_tabs": true,
-    "folder_exclude_patterns":
-    [
-        ".svn",
-        ".git",
-        ".hg",
-        "CVS",
-        "node_modules"
-    ],
-    "index_exclude_patterns": ["*.log"]
+	"detect_indentation": false,
+	"ensure_newline_at_eof_on_save": true,
+	"folder_exclude_patterns":
+	[
+		".svn",
+		".git",
+		".hg",
+		"CVS",
+		"node_modules"
+	],
+	"font_size": 9,
+	"highlight_line": true,
+	"highlight_modified_tabs": true,
+	"ignored_packages":
+	[
+		"Vintage"
+	],
+	"index_exclude_patterns":
+	[
+		"*.log"
+	],
+	"shift_tab_unindent": true,
+	"tab_size": 4,
+	"translate_tabs_to_spaces": true,
+	"word_separators": "./\\()\"'-:,.;<>~!@#$%^&*|+=[]{}`~?_"
 }
