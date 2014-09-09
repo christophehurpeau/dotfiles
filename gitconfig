@@ -36,7 +36,7 @@
     l = !git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit -15 && echo ''
     d = diff --minimal --word-diff=color
     amend = commit --amend
-    add-A = add -A
+    aa = add --all :/
     commit-a = commit -a
     unstage = reset HEAD
     backup = push --mirror backup
