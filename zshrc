@@ -226,7 +226,7 @@ prompt_first_line () {
 
         if [[ -d .git ]] ; then
             echo -n "Executing git fetch...\r"
-            local git_fetch_result=$(git fetch 2>/dev/null)
+            local git_fetch_result=$(git fetch --no-tags --no-recurse-submodules $(git rev-parse --symbolic-full-name --abbrev-ref @{upstream} | sed 's!/! !') 2>/dev/null)
             echo -n "                      \r"
             if [[ -n "$git_fetch_result" ]] ; then
                 echo $git_fetch_result
