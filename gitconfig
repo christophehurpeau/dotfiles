@@ -6,9 +6,9 @@
     default = simple
 
 [core]
-    editor = nano
-	whitespace = trailing-space,space-before-tab,tab-in-indent
-	excludesfile = ~/config-gitted/.gitignore
+    editor = atom -w
+    whitespace = trailing-space,space-before-tab,tab-in-indent
+    excludesfile = ~/config-gitted/.gitignore
 
 [web]
     browser = firefox
@@ -43,5 +43,7 @@
     stash-and-pull = !git stash && git pull && git stash pop
     edit-unmerged = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; editor `f`"
     add-unmerged = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; git add `f`"
+    create-branch = !git-create-branch
+
 [merge]
-	stat = true
+    stat = true
