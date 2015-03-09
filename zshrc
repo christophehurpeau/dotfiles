@@ -47,7 +47,7 @@ unset force_color_prompt
 # Returns system load as percentage, i.e., '40' rather than '0.40)'.
 function load()
 {
-    local SYSLOAD=$(cut -d " " -f1 /proc/loadavg | tr -d '.')
+    local SYSLOAD=$(cut -d " " -f1 /proc/loadavg 2>/dev/null | tr -d '.' || sysctl -n vm.loadavg | cut -d ' ' -f 3 | sed 's/[\.,]//g')
     # System load of the current host.
     echo $((10#$SYSLOAD))       # Convert to decimal.
 }
@@ -71,8 +71,7 @@ function load_color()
 function disk_color()
 {
     # No 'write' privilege in the current directory.
-    local used=$(command df -P "$PWD" |
-               awk 'END {print $5} {sub(/%/,"")}')
+    local used=$(command df -P "$PWD" | awk 'END {print $5} {sub(/%/,"")}' | rev | cut -c 2- | rev)
     if [ ${used} -gt 95 ]; then
         echo -en "$fg_bold[white]$bg[red]"           # Disk almost full (>95%).
     elif [ ${used} -gt 90 ]; then
@@ -188,7 +187,7 @@ if [ "$color_prompt" = yes ]; then
         SU="$fg_bold[green]"
     fi
 
-    NCPU=$(grep -c 'processor' /proc/cpuinfo)    # Number of CPUs
+    NCPU=`grep -c 'processor' /proc/cpuinfo 2>/dev/null || sysctl -n 'machdep.cpu.core_count'`   # Number of CPUs
     SLOAD=$(( 100*${NCPU} ))        # Small load
     MLOAD=$(( 200*${NCPU} ))        # Medium load
     XLOAD=$(( 400*${NCPU} ))        # Xlarge load

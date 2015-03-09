@@ -1,3 +1,8 @@
+[filter "media"]
+	required = true
+	clean = git media clean %f
+	smudge = git media smudge %f
+
 [user]
     name = Christophe Hurpeau
     email = christophe@hurpeau.com
@@ -6,7 +11,7 @@
     default = simple
 
 [core]
-    editor = atom -w
+    editor = subl -w
     whitespace = trailing-space,space-before-tab,tab-in-indent
     excludesfile = ~/config-gitted/.gitignore
 
@@ -35,9 +40,11 @@
     st = status --short --branch
     l = !git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit -15 && echo ''
     d = diff --minimal --word-diff=color
-    amend = commit --amend
+    amend = commit --amend --reset-author
     aa = add --all :/
     commit-a = commit -a
+    push-force = push --force-with-lease
+    push-f = push --force-with-lease
     unstage = reset HEAD
     backup = push --mirror backup
     stash-and-pull = !git stash && git pull && git stash pop
@@ -47,3 +54,8 @@
 
 [merge]
     stat = true
+
+[filter "hawser"]
+	clean = git hawser clean %f
+	smudge = git hawser smudge %f
+	required = true
