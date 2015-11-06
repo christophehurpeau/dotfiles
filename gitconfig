@@ -1,7 +1,7 @@
 [filter "media"]
-	required = true
-	clean = git media clean %f
-	smudge = git media smudge %f
+    required = true
+    clean = git media clean %f
+    smudge = git media smudge %f
 
 [user]
     name = Christophe Hurpeau
@@ -10,10 +10,17 @@
 [push]
     default = simple
 
+[pull]
+    rebase = true
+
+[rebase]
+    autoStash = true
+    missingCommitsCheck = warn
+
 [core]
-    editor = subl -w
+    editor = nano
     whitespace = trailing-space,space-before-tab,tab-in-indent
-    excludesfile = ~/config-gitted/.gitignore
+    excludesfile = ~/config-gitted/.gitignore_global
 
 [web]
     browser = firefox
@@ -56,6 +63,10 @@
     stat = true
 
 [filter "hawser"]
-	clean = git hawser clean %f
-	smudge = git hawser smudge %f
-	required = true
+    clean = git hawser clean %f
+    smudge = git hawser smudge %f
+    required = true
+[filter "lfs"]
+    clean = git lfs clean %f
+    smudge = git lfs smudge %f
+    required = true
