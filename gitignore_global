@@ -6,6 +6,8 @@
 *.sublime-project
 npm-debug.log
 
+node_modules
+
 #*
 *$
 *.BAK

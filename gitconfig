@@ -1,72 +1,85 @@
 [filter "media"]
-    required = true
-    clean = git media clean %f
-    smudge = git media smudge %f
+  required = true
+  clean = git media clean %f
+  smudge = git media smudge %f
 
 [user]
-    name = Christophe Hurpeau
-    email = christophe@hurpeau.com
+  name = Christophe Hurpeau
+  email = christophe@hurpeau.com
+  signingkey = 534C9ACA
 
 [push]
-    default = simple
+  default = simple
 
 [pull]
-    rebase = true
+  rebase = true
 
 [rebase]
-    autoStash = true
-    missingCommitsCheck = warn
+  autoStash = true
+  missingCommitsCheck = warn
 
 [core]
-    editor = nano
-    whitespace = trailing-space,space-before-tab,tab-in-indent
-    excludesfile = ~/config-gitted/.gitignore_global
+  editor = nano
+  whitespace = trailing-space,space-before-tab,tab-in-indent
+  excludesfile = ~/config-gitted/gitignore_global
+  ignorecase = true
+  attributesfile = /Users/chris/config-gitted/.gitattributes
 
 [web]
-    browser = firefox
+  browser = firefox
 
 [color]
   ui = auto # covers diff = true, status = auto, branch = auto
   interactive = auto
 
 [pager]
-    diff = false
+  diff = false
 
 [diff]
-    tool = meld
+  tool = meld
+  compactionHeuristic = true
 
 [difftool]
-    prompt = false
+  prompt = false
 
 [branch]
-    autosetuprebase = always
+  autosetuprebase = always
 
 [alias]
-    alias = !git config --list | grep 'alias\\.' | sed 's/alias\\.\\([^=]*\\)=\\(.*\\)/\\1\\\t => \\2/' | sort
-    co = checkout
-    st = status --short --branch
-    l = !git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit -15 && echo ''
-    d = diff --minimal --word-diff=color
-    amend = commit --amend --reset-author
-    aa = add --all :/
-    commit-a = commit -a
-    push-force = push --force-with-lease
-    push-f = push --force-with-lease
-    unstage = reset HEAD
-    backup = push --mirror backup
-    stash-and-pull = !git stash && git pull && git stash pop
-    edit-unmerged = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; editor `f`"
-    add-unmerged = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; git add `f`"
-    create-branch = !git-create-branch
+  alias = !git config --list | grep 'alias\\.' | sed 's/alias\\.\\([^=]*\\)=\\(.*\\)/\\1\\\t => \\2/' | sort
+  c = commit
+  co = checkout
+  st = status --short --branch
+  l = !git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit -15 && echo ''
+  d = diff --minimal --word-diff=color
+  amend = commit --amend --reset-author
+  aa = add --all :/
+  commit-a = commit -a
+  p = !git pull && git push
+  push-force = push --force-with-lease
+  push-f = push --force-with-lease
+  pf = push --force-with-lease
+  unstage = reset HEAD
+  backup = push --mirror backup
+  conflicts-list = diff --name-only --diff-filter=U
+  conflicts-edit = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; editor `f`"
+  conflicts-add = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; git add `f`"
+  create-branch = !git-create-branch
 
 [merge]
-    stat = true
+  stat = true
 
 [filter "hawser"]
-    clean = git hawser clean %f
-    smudge = git hawser smudge %f
-    required = true
+  clean = git hawser clean %f
+  smudge = git hawser smudge %f
+  required = true
 [filter "lfs"]
-    clean = git lfs clean %f
-    smudge = git lfs smudge %f
-    required = true
+  clean = git lfs clean %f
+  smudge = git lfs smudge %f
+  required = true
+[commit]
+  gpgsign = true
+[tag]
+  gpgsign = true
+[diff "nodiff"]
+  command = /usr/bin/true
