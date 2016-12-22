@@ -1,8 +1,34 @@
-alias n='npm'
 alias g='git'
-alias nr='npm -s run'
-alias ni='npm i'
-alias nup='ncu -dua && ncu -up && npm i'
+
+function n() {
+  if [ -f yarn.lock ]; then
+    echo "Use y instead"
+  else
+    npm $*
+  fi
+}
+
+function nr() {
+  if [ -f yarn.lock ]; then
+    echo "Use yr instead"
+  else
+    npm -s run $*
+  fi
+}
+
+function ni() {
+  if [ -f yarn.lock ]; then
+    echo "Use y instead"
+  else
+    npm i $*
+  fi
+}
+
+# alias nup='ncu -dua && ncu -up && npm i'
+alias y='yarn'
+alias yui='yarn upgrade && yarn upgrade-interactive'
+alias yr='yarn run'
+
 
 function dockerrm() {
     docker stop $1 ; docker rm $1
@@ -10,7 +36,7 @@ function dockerrm() {
 
 alias meteo='curl wttr.in'
 
-function ssh () {/usr/bin/ssh -t $@ "tmux -CC new -As chris || tmux new -As chris || screen -D -R -S chris || zsh || bash ";}
+# function ssh () {/usr/bin/ssh -t $@ "tmux -CC new -As chris || tmux new -As chris || screen -D -R -S chris || zsh || bash ";}
 
 function nano () {
     if [ $USER != 'root' ]; then
@@ -22,4 +48,3 @@ function nano () {
     fi
     /usr/bin/nano --mouse --tabstospaces --tabsize=4 --autoindent $*
 }
-
