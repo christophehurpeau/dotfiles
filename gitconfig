@@ -50,7 +50,7 @@
   c = commit
   co = checkout
   st = status --short --branch
-  l = !git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit -15 && echo ''
+  l = !git --no-pager log --color --graph --pretty="tformat:'%Cred%h\t%Creset\t%C(green)%cr\t%C(magenta)%an\t%Creset%s %C(yellow)%d%Creset'" --abbrev-commit -9 | column -ts'\t'
   d = diff --minimal --word-diff=color
   amend = commit --amend --reset-author
   aa = add --all :/
@@ -65,6 +65,7 @@
   conflicts-edit = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; editor `f`"
   conflicts-add = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; git add `f`"
   create-branch = !git-create-branch
+  lb = "!git for-each-ref --sort=-committerdate refs/heads --format='%(HEAD)%(color:yellow)%(refname:short)\t%(color:green)%(committerdate:relative)\t%(color:magenta)%(authorname)\t%(color:reset)%(subject)%(color:reset)' | column -ts'\t'"
 
 [merge]
   stat = true
