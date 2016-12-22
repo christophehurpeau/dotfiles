@@ -2,13 +2,13 @@ unsetopt share_history
 
 # Preferred editor for local and remote sessions
 if [[ -n $SSH_CONNECTION ]]; then
-  export EDITOR='subl'
+  export EDITOR='atom'
 else
   export EDITOR='nano'
 fi
 
+source ~/config-gitted/bash_aliases
 source ~/.bash_aliases
-
 
 
 #-------------------------------------------------------------
@@ -57,15 +57,38 @@ function load_color()
 {
     local SYSLOAD=$(load)
     if [ ${SYSLOAD} -gt ${XLOAD} ]; then
-        echo -en "$fg_bold[white]$bg[red]"
+        # echo -en "%F{white}%K{red}"
+        echo -n red
     elif [ ${SYSLOAD} -gt ${MLOAD} ]; then
-        echo -en "$fg[red]" #${Red}
+        # echo -en "%F{red}" #${Red}
+        echo -n red
     elif [ ${SYSLOAD} -gt ${SLOAD} ]; then
-        echo -en "$fg_bold[red]" #${BRed}
+        # echo -en "%B%F{red}" #${BRed}
+        echo -n red
     else
-        echo -en "$fg[green]" #${Green}
+        # echo -en "%F{green}" #${Green}
+        echo -n green
     fi
 }
+
+prompt_date() {
+  local SYSLOAD=$(load)
+  if [ ${SYSLOAD} -gt ${XLOAD} ]; then
+    # echo -en "%F{white}%K{red}"
+    prompt_segment white red
+  elif [ ${SYSLOAD} -gt ${MLOAD} ]; then
+    prompt_segment red black
+  elif [ ${SYSLOAD} -gt ${SLOAD} ]; then
+    # echo -en "%B%F{red}" #${BRed}
+    prompt_segment red black
+  else
+    # echo -en "%F{green}" #${Green}
+    prompt_segment green black
+  fi
+
+  echo -n `date +"%H:%M:%S"`
+}
+
 
 # Returns a color according to free disk space in $PWD.
 function disk_color()
@@ -100,62 +123,6 @@ function writable_color(){
         echo -en "$fg[cyan]"
         # Current directory is size '0' (like /proc, /sys etc).
     fi
-}
-
-
-
-# Repositories : GIT
-
-_escape(){
-    printf "%q" "$*"
-}
-
-repositoryStatus() {
-#    command git fetch  2>/dev/null
-
-    # https://github.com/magicmonty/bash-git-prompt
-    # https://github.com/nojhan/liquidprompt/blob/master/liquidprompt
-
-    local gitdir
-    gitdir="$(git rev-parse --git-dir 2>/dev/null)"
-    [[ $? -ne 0 || ! $gitdir =~ (.*\/)?\.git.* ]] && return
-    local branch="$(git symbolic-ref HEAD 2>/dev/null)"
-    if [[ $? -ne 0 || -z "$branch" ]] ; then
-        # In detached head state, use commit instead
-        branch="$(git rev-parse --short HEAD 2>/dev/null)"
-    fi
-    [[ $? -ne 0 || -z "$branch" ]] && return
-    branch="${branch#refs/heads/}"
-    branch=$(_escape "$branch")
-
-    local marks=''
-    local stats=`git diff --numstat 2>/dev/null | awk 'NF==3 {plus+=$1; minus+=$2} END {printf("+%d/-%d\n", plus, minus)}'`
-    if [[ $stats == "+0/-0" ]]; then
-        stats="%{$fg_no_bold[white]%}$stats%{$reset_color%}"
-    else
-        stats="%{$fg_no_bold[yellow]%}$stats%{$reset_color%}"
-    fi
-
-    local stash
-    stasj=$(git stash list 2>/dev/null)
-    local git_status
-    git_status=$(command git status --porcelain -b 2> /dev/null)
-    if [[ ! -z "$stash" ]] ; then
-        marks="${marks}%"
-    fi
-    if $(echo "$git_status" | grep '^## .*ahead' &> /dev/null); then
-        marks="${marks}%{$fg_bold[red]↑$reset_color%}"
-    fi
-    if $(echo "$git_status" | grep '^## .*behind' &> /dev/null); then
-        marks="${marks}%{$fg_bold[red]↓$reset_color%}"
-    fi
-
-    echo -n " %{$fg_bold[green]%}["
-    echo -n "$branch$(parse_git_dirty) $stats"
-    if [[ -n "$marks" ]] ; then
-        echo -n " $marks"
-    fi
-    echo -n "%{$fg_bold[green]%}]%{$reset_color%}"
 }
 
 
@@ -210,21 +177,96 @@ fi
 #-------------------------------------------------------------
 # PROMPT
 #-------------------------------------------------------------
+#
+
+# setopt prompt_subst
+# TRAPALRM() {
+#     zle reset-prompt
+# }
+# TMOUT=1
+
+
+_zsh_empty_command=true
+_zsh_command_started=''
+magic-enter () {
+    zle accept-line
+    if [[ -z "${BUFFER##+([[:space:]])}" ]] ; then
+        _zsh_empty_command=true
+    else
+        _zsh_empty_command=false
+    fi
+}
+
+zle -N magic-enter
+bindkey "^M" magic-enter
+
+preexec() {
+    if [[ $_zsh_empty_command = false ]] ; then
+        _zsh_command_started=$(date +%s)
+    fi
+}
+
 _zsh_last_current_directory=''
-prompt_first_line () {
+ASYNC_PROC=0
+precmd() {
+    function async() {
+        # save to temp file
+        printf "%s" "$(rprompt_cmd)" > "/tmp/zsh_prompt_$$"
+
+        # signal parent
+        kill -s USR1 $$
+    }
+
+    # do not clear RPROMPT, let it persist
+
+    # kill child if necessary
+    if [[ "${ASYNC_PROC}" != 0 ]]; then
+        kill -s HUP $ASYNC_PROC >/dev/null 2>&1 || :
+    fi
+
+    # add stuff when changing directory
     local current_directory
     current_directory=`pwd`
-    if [[ $_zsh_last_current_directory != $current_directory ]] ; then
-        _zsh_last_current_directory="$current_directory"
 
+    RET=$?
+    if [[ $_zsh_command_started != '' ]] ; then
+        local current_time=$(date +%s)
+        if [[ $_zsh_command_started -lt (current_time - 2) ]] || [[ $RET != 0 ]]; then
+            local ret_color
+            if [ "$color_prompt" = yes ]; then
+                if [ $RET = 0 ]; then
+                    ret_color="green"
+                else
+                    ret_color="red"
+                fi
+            else
+                ret_color=""
+            fi
+
+            echo -n "\ed$fg[$ret_color]$(date +"%H:%M:%S")$reset_color \$? = $RET"
+            echo
+
+            _zsh_command_started=''
+        fi
+    fi
+
+    if [[ $_zsh_last_current_directory != $current_directory ]] || [[ $_zsh_empty_command = true ]] ; then
         if [ "$color_prompt" = yes ]; then
-                echo "$PROMPT_FIRST_LINE$(disk_color)$(pwd)$reset_color"
+            echo "$PROMPT_FIRST_LINE$(disk_color)$current_directory$reset_color"
         else
-            echo "$PROMPT_FIRST_LINE$(pwd)"
+            echo "$PROMPT_FIRST_LINE$current_directory"
         fi
 
-        if [[ -d .git ]] ; then
-            echo -n "Executing git fetch...\r"
+        if [[ $_zsh_last_current_directory != $current_directory ]] ; then
+            ls
+        fi
+
+        _zsh_last_current_directory="$current_directory"
+        _zsh_empty_command=false
+
+
+        if [[ $_zsh_last_current_directory != $current_directory ]] && [[ -d .git ]] ; then
+            echo -n "$fg_bold[magenta]Executing git fetch...\r$reset_color"
             local git_fetch_result=$(git fetch --no-tags --no-recurse-submodules $(git rev-parse --symbolic-full-name --abbrev-ref @{upstream} | sed 's!/! !') 2>/dev/null)
             echo -n "                      \r"
             if [[ -n "$git_fetch_result" ]] ; then
@@ -238,24 +280,97 @@ prompt_first_line () {
         local CMD=${1[(wr)^(*=*|sudo|-*)]}
         echo -ne "\ek$CMD\e\\"
     fi
+
+
+    # start background computation
+    async &!
+    ASYNC_PROC=$!
 }
-precmd() {
-    prompt_first_line
+
+function TRAPUSR1() {
+  # read from temp file
+  RPROMPT="$(cat /tmp/zsh_prompt_$$)"
+
+  # reset proc number
+  ASYNC_PROC=0
+
+  # redisplay
+  zle && zle reset-prompt
 }
 
 
-# PROMPT="\$(prompt_first_line)"
-PROMPT=""
+rprompt_cmd() {
 
-if [ "$color_prompt" = yes ]; then
-    # Time of day (with load info):
-    PROMPT=${PROMPT}"%{\$(load_color)%}%*%{$reset_color%}"
-    # Folder name
-    PROMPT=${PROMPT}" %{\$(disk_color)%}%C%{$reset_color%}"
-    # Repository status
-    PROMPT=${PROMPT}"\$(repositoryStatus)"
-    # Prompt (with 'job' info):
-    PROMPT=${PROMPT}" %{\$(job_color)%}\$%{$reset_color%} "
-else
-    PROMPT=${PROMPT}"%* %C \$ "
-fi
+}
+
+## Main prompt
+build_prompt() {
+  if [ "$color_prompt" = yes ]; then
+    RETVAL=$?
+    prompt_status
+    prompt_end
+  else
+    echo -n "%* %C \$ "
+  fi
+}
+
+build_rprompt() {
+  if [ "$color_prompt" = yes ]; then
+    RETVAL=$?
+    prompt_git
+    prompt_hg
+    prompt_date
+    prompt_end
+    # echo -n "%b%f"
+  else
+  fi
+}
+
+prompt_time_load() {
+  # The load segment can have three different states
+  local current_state="unknown"
+  local cores
+
+  typeset -AH load_states
+  load_states=(
+    'critical'      'red'
+    'warning'       'yellow'
+    'normal'        'green'
+  )
+
+  if [[ "$OS" == "OSX" ]]; then
+    load_avg_1min=$(sysctl vm.loadavg | grep -o -E '[0-9]+(\.|,)[0-9]+' | head -n 1)
+    cores=$(sysctl -n hw.logicalcpu)
+  else
+    load_avg_1min=$(grep -o "[0-9.]*" /proc/loadavg | head -n 1)
+    cores=$(nproc)
+  fi
+
+  # Replace comma
+  load_avg_1min=${load_avg_1min//,/.}
+
+  if [[ "$load_avg_1min" -gt $(bc -l <<< "${cores} * 0.7") ]]; then
+    current_state="critical"
+  elif [[ "$load_avg_1min" -gt $(bc -l <<< "${cores} * 0.5") ]]; then
+    current_state="warning"
+  else
+    current_state="normal"
+  fi
+
+  local time_format="%D{%H:%M:%S}"
+  if [[ -n "$POWERLEVEL9K_TIME_FORMAT" ]]; then
+    time_format="$POWERLEVEL9K_TIME_FORMAT"
+  fi
+
+  "$1_prompt_segment" "${0}_${current_state}" "$2" "${load_states[$current_state]}" "$DEFAULT_COLOR" "$time_format"
+}
+
+POWERLEVEL9K_MODE='flat'
+
+POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(status background_jobs)
+POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(vcs time_load)
+
+# PROMPT='%{%f%b%k%}$(build_prompt) '
+# RPROMPT='%{%f%b%k%}$(build_rprompt)'
+
+source ~/config-gitted/npm_completion
