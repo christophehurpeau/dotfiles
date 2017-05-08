@@ -1,4 +1,10 @@
-alias g='git'
+function g() {
+  if [ "$*" = "push -f" ]; then
+    echo "push -f forbidden"
+  else
+    git $*
+  fi
+}
 
 function n() {
   if [ -f yarn.lock ]; then
@@ -26,9 +32,14 @@ function ni() {
 
 # alias nup='ncu -dua && ncu -up && npm i'
 alias y='yarn'
-alias yui='yarn upgrade && yarn upgrade-interactive'
+alias yui='yarn && yarn upgrade-interactive && yarn upgrade'
 alias yr='yarn run'
-
+alias s='yarn start'
+alias ys='yarn start'
+alias yt='yarn test'
+alias yb='yarn build'
+alias yw='yarn watch'
+alias webstorm='open -a /Applications/WebStorm.app'
 
 function dockerrm() {
     docker stop $1 ; docker rm $1

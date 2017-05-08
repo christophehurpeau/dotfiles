@@ -55,7 +55,7 @@
   amend = commit --amend --reset-author
   aa = add --all :/
   commit-a = commit -a
-  p = !git pull && git push
+  pp = !git pull && git push
   push-force = push --force-with-lease
   push-f = push --force-with-lease
   pf = push --force-with-lease
