@@ -66,6 +66,8 @@
   conflicts-add = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; git add `f`"
   create-branch = !git-create-branch
   lb = "!git for-each-ref --sort=-committerdate refs/heads --format='%(HEAD)%(color:yellow)%(refname:short)\t%(color:green)%(committerdate:relative)\t%(color:magenta)%(authorname)\t%(color:reset)%(subject)%(color:reset)' | column -ts'\t'"
+  wip = "!git add -A; git rm $(git ls-files --deleted) 2> /dev/null; git commit --no-verify -m '--wip-- [skip ci]'"
+  unwip = "!git log -n 1 | grep -q -c '\\-\\-wip\\-\\-' && git reset HEAD~1"
 
 [merge]
   stat = true
