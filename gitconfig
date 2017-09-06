@@ -9,7 +9,7 @@
   signingkey = 534C9ACA
 
 [push]
-  default = simple
+  default = current
 
 [pull]
   rebase = true
@@ -49,31 +49,51 @@
   pushDefault = origin
 
 [alias]
-  alias = !git config --list | grep 'alias\\.' | sed 's/alias\\.\\([^=]*\\)=\\(.*\\)/\\1\\\t => \\2/' | sort
+  # aliases
+  aliases = !git config --list | grep 'alias\\.' | sed 's/alias\\.\\([^=]*\\)=\\(.*\\)/\\1\\\t => \\2/' | sort
+  # wip/unwip
+  wip = "!git add -A; git rm $(git ls-files --deleted) 2> /dev/null; git commit --no-verify -m '--wip-- [skip ci]'"
+  unwip = "!git log -n 1 | grep -q -c '\\-\\-wip\\-\\-' && git reset HEAD~1"
+  # add
+  aa = add --all :/
+  # branch
+  create-branch = !git-create-branch
+  rename = branch -m
+  # commit
+  amend = commit --amend --reset-author
   c = commit
   cm = commit -m
-  co = checkout
-  cb = checkout -b
-  st = status --short --branch
-  l = !git --no-pager log --color --graph --pretty="tformat:'%Cred%h\t%Creset\t%C(green)%cr\t%C(magenta)%an\t%Creset%s %C(yellow)%d%Creset'" --abbrev-commit -9 | column -ts'\t'
-  d = "diff --minimal --word-diff=color --word-diff-regex='[^[:space:],;=(){}?]+|[,;=(){}?]+'"
-  amend = commit --amend --reset-author
-  aa = add --all :/
+  # checkout
+  o = checkout
+  ob = checkout -b
+  # cherry-pick
   pk = cherry-pick
+  # diff
+  d = "diff --minimal --word-diff=color --word-diff-regex='[^[:space:],;=(){}?]+|[,;=(){}?]+'"
+  conflicts-list = diff --name-only --diff-filter=U
+  conflicts-edit = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; editor `f`"
+  conflicts-add = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; git add `f`"
+  # fetch
+  f = fetch
+  fo = fetch origin
+  fu = fetch upstream
+  # log
+  l = !git --no-pager log --color --graph --pretty="tformat:'%Cred%h\t%Creset\t%C(green)%cr\t%C(magenta)%an\t%Creset%s %C(yellow)%d%Creset'" --abbrev-commit -9 | column -ts'\t'
+  l19 = !git --no-pager log --color --graph --pretty="tformat:'%Cred%h\t%Creset\t%C(green)%cr\t%C(magenta)%an\t%Creset%s %C(yellow)%d%Creset'" --abbrev-commit -19 | column -ts'\t'
+  lb = "!git for-each-ref --sort=-committerdate refs/heads --format='%(HEAD)%(color:yellow)%(refname:short)\t%(color:green)%(committerdate:relative)\t%(color:magenta)%(authorname)\t%(color:reset)%(subject)%(color:reset)' | column -ts'\t'"
+  # pull
+  pl = pull
+  plu = pull -u
+  # push
   pp = !git p && git push
   push-force = push --force-with-lease
   push-f = push --force-with-lease
   pf = push --force-with-lease
-  unstage = reset HEAD
   backup = push --mirror backup
-  conflicts-list = diff --name-only --diff-filter=U
-  conflicts-edit = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; editor `f`"
-  conflicts-add = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; git add `f`"
-  create-branch = !git-create-branch
-  lb = "!git for-each-ref --sort=-committerdate refs/heads --format='%(HEAD)%(color:yellow)%(refname:short)\t%(color:green)%(committerdate:relative)\t%(color:magenta)%(authorname)\t%(color:reset)%(subject)%(color:reset)' | column -ts'\t'"
-  wip = "!git add -A; git rm $(git ls-files --deleted) 2> /dev/null; git commit --no-verify -m '--wip-- [skip ci]'"
-  unwip = "!git log -n 1 | grep -q -c '\\-\\-wip\\-\\-' && git reset HEAD~1"
-  rename = branch -m
+  # reset
+  unstage = reset HEAD
+  # status
+  st = status --short --branch
 
 [merge]
   stat = true
