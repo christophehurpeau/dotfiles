@@ -32,7 +32,8 @@ function ni() {
 
 # alias nup='ncu -dua && ncu -up && npm i'
 alias y='yarn'
-alias yui='yarn && yarn upgrade-interactive && yarn upgrade'
+alias yui='yarn && yarn upgrade-interactive'
+alias yu='yui && yarn upgrade'
 alias yr='yarn run'
 alias s='yarn start'
 alias ys='yarn start'
