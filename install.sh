@@ -10,7 +10,7 @@ for rcfile in "${ZDOTDIR:-$HOME}"/.zprezto/runcoms/^README.md(.N); do
 done
 
 
-git clone git@github.com:christophehurpeau/config-gitted.git ~/config-gitted/
+git clone git@github.com:christophehurpeau/config-gitted.git ~/config-gitted/ || git clone https://github.com/christophehurpeau/config-gitted.git ~/config-gitted/
 
 ln -s ~/config-gitted/gitconfig ~/.gitconfig
 rm ~/.zshrc
