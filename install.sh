@@ -1,4 +1,6 @@
-#!/bin/sh
+#!/bin/zsh
+
+chsh -s /bin/zsh
 
 git clone --recursive https://github.com/sorin-ionescu/prezto.git "${ZDOTDIR:-$HOME}/.zprezto"
 
@@ -15,7 +17,10 @@ rm ~/.zshrc
 rm ~/.zpreztorc
 ln -s ~/config-gitted/zpreztorc ~/.zpreztorc
 
-rm ~/.config/sublime-text-3/Packages/User/Preferences.sublime-settings ; ln -s ~/config-gitted/Preferences.sublime-settings ~/.config/sublime-text-3/Packages/User/Preferences.sublime-settings
+if [ -f ~/.config/sublime-text-3/Packages/User/Preferences.sublime-settings ]; then
+  rm ~/.config/sublime-text-3/Packages/User/Preferences.sublime-settings ; ln -s ~/config-gitted/Preferences.sublime-settings ~/.config/sublime-text-3/Packages/User/Preferences.sublime-settings
+fi
 echo 'source ~/config-gitted/bashrc' >> ~/.bashrc
 echo 'source ~/config-gitted/zshrc' >> ~/.zshrc
-~/.zshrc
+
+source ~/.zshrc
