@@ -46,7 +46,8 @@ function dockerrm() {
     docker stop $1 ; docker rm $1
 }
 
-alias meteo='curl wttr.in'
+alias weather='curl wttr.in'
+alias mypublicip='curl ipinfo.io/ip'
 
 # function ssh () {/usr/bin/ssh -t $@ "tmux -CC new -As chris || tmux new -As chris || screen -D -R -S chris || zsh || bash ";}
 
