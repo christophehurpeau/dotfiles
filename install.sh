@@ -13,6 +13,7 @@ done
 git clone git@github.com:christophehurpeau/config-gitted.git ~/config-gitted/ || git clone https://github.com/christophehurpeau/config-gitted.git ~/config-gitted/
 
 ln -s ~/config-gitted/gitconfig ~/.gitconfig
+touch ~/.bash_aliases
 rm ~/.zshrc
 rm ~/.zpreztorc
 ln -s ~/config-gitted/zpreztorc ~/.zpreztorc
