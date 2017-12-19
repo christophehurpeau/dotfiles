@@ -85,11 +85,12 @@
   pl = pull
   plu = pull -u
   # push
-  pp = !git p && git push
-  push-force = push --force-with-lease
-  push-f = push --force-with-lease
-  pf = push --force-with-lease
+  ph = push
+  phu = push -u
+  phf = push --force-with-lease
   backup = push --mirror backup
+  # pull + push
+  pp = !git pull && git push
   # reset
   unstage = reset HEAD
   # status
