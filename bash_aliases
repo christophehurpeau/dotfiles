@@ -6,13 +6,14 @@ function g() {
   fi
 }
 
-function n() {
-  if [ -f yarn.lock ]; then
-    echo "Use y instead"
-  else
-    npm $*
-  fi
-}
+#function n() {
+#  if [ -f yarn.lock ]; then
+#    echo "Use y instead"
+#  else
+#    npm $*
+#  fi
+#}
+alias n='npm'
 
 function nr() {
   if [ -f yarn.lock ]; then
@@ -32,7 +33,7 @@ function ni() {
 
 # alias nup='ncu -dua && ncu -up && npm i'
 alias y='yarn'
-alias yui='yarn && yarn upgrade-interactive'
+alias yui='yarn && yarn upgrade-interactive --latest'
 alias yu='yui && yarn upgrade'
 alias yr='yarn run'
 alias s='yarn start'
