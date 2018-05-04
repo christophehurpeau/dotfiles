@@ -1,6 +1,6 @@
 #!/bin/zsh
 
-chsh -s /bin/zsh
+sudo chsh -s /bin/zsh $USER
 
 git clone --recursive https://github.com/sorin-ionescu/prezto.git "${ZDOTDIR:-$HOME}/.zprezto"
 
