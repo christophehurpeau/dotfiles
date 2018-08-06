@@ -17,6 +17,9 @@ fi
 source ~/config-gitted/bash_aliases
 source ~/.bash_aliases
 
+if [[ -f ~/.env ]]; then
+  eval $(cat ~/.env | sed 's/^/export /')
+fi
 
 # gpg agent
 # [ -f ~/.gpg-agent-info ] && source ~/.gpg-agent-info
@@ -27,3 +30,9 @@ source ~/.bash_aliases
 # fi
 
 # test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell_integration.zsh"
+
+# https://docs.brew.sh/Shell-Completion
+if type brew &>/dev/null; then
+  FPATH=$(brew --prefix)/share/zsh/site-functions:$FPATH
+fi
+

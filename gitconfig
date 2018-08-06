@@ -10,6 +10,7 @@
 
 [push]
   default = current
+  followTags = true
 
 [pull]
   rebase = true
@@ -17,6 +18,8 @@
 [rebase]
   autoStash = true
   missingCommitsCheck = warn
+  abbreviateCommands = true
+  ignoreDate = true
 
 [core]
   editor = nano
@@ -104,13 +107,15 @@
   smudge = git hawser smudge %f
   required = true
 [filter "lfs"]
+	clean = git-lfs clean -- %f
 	smudge = git-lfs smudge -- %f
 	process = git-lfs filter-process
 	required = true
-	clean = git-lfs clean -- %f
 [commit]
   gpgsign = true
 [tag]
   gpgsign = true
 [diff "nodiff"]
   command = /usr/bin/true
+[url "ssh://git@github.com"]
+	insteadOf = https://github.com

@@ -41,6 +41,7 @@ alias ys='yarn start'
 alias yt='yarn test'
 alias yb='yarn build'
 alias yw='yarn watch'
+alias yl='yarn lint'
 alias webstorm='open -a /Applications/WebStorm.app'
 
 function dockerrm() {

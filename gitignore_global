@@ -11,6 +11,10 @@
 *.sublime-workspace
 *.sublime-project
 
+# vscode
+
+.vscode
+
 # Dependency directories
 ## npm
 node_modules
