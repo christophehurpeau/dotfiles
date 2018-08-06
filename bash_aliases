@@ -32,8 +32,16 @@ function ni() {
 }
 
 # alias nup='ncu -dua && ncu -up && npm i'
-alias y='yarn'
-alias yui='yarn && yarn upgrade-interactive --latest'
+
+function y() {
+  if [ -f package-lock.json ]; then
+    echo "Use ni instead"
+  else
+    yarn $*
+  fi
+}
+
+alias yui='y && yarn upgrade-interactive --latest'
 alias yu='yui && yarn upgrade'
 alias yr='yarn run'
 alias s='yarn start'
