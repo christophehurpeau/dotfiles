@@ -18,6 +18,7 @@ alias n='npm'
 function nr() {
   if [ -f yarn.lock ]; then
     echo "Use yr instead"
+    return 1
   else
     npm -s run $*
   fi
@@ -26,6 +27,7 @@ function nr() {
 function ni() {
   if [ -f yarn.lock ]; then
     echo "Use y instead"
+    return 1
   else
     npm i $*
   fi
@@ -36,12 +38,13 @@ function ni() {
 function y() {
   if [ -f package-lock.json ]; then
     echo "Use ni instead"
+    return 1
   else
     yarn $*
   fi
 }
 
-alias yui='y && yarn upgrade-interactive --latest'
+alias yui='y && yarn upgrade-interactive --latest && yarn-tools fix-duplicates yarn.lock > yarn-fixed.lock && mv -f yarn-fixed.lock yarn.lock && yarn --prefer-offline'
 alias yu='yui && yarn upgrade'
 alias yr='yarn run'
 alias s='yarn start'
