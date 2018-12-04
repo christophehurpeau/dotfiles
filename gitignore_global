@@ -12,8 +12,8 @@
 *.sublime-project
 
 # vscode
-
 .vscode
+.history
 
 # Dependency directories
 ## npm
