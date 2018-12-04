@@ -69,6 +69,8 @@
   # checkout
   o = checkout
   ob = checkout -b
+  master = checkout -B master origin/master
+  om = !git fetch origin master && git checkout origin/master
   # cherry-pick
   pk = cherry-pick
   # diff
@@ -87,6 +89,7 @@
   # pull
   pl = pull
   plu = pull -u
+  plom = pull origin master
   # push
   ph = push
   phu = push -u
@@ -107,10 +110,10 @@
   smudge = git hawser smudge %f
   required = true
 [filter "lfs"]
-	clean = git-lfs clean -- %f
-	smudge = git-lfs smudge -- %f
-	process = git-lfs filter-process
-	required = true
+  clean = git-lfs clean -- %f
+  smudge = git-lfs smudge -- %f
+  process = git-lfs filter-process
+  required = true
 [commit]
   gpgsign = true
 [tag]
@@ -118,4 +121,5 @@
 [diff "nodiff"]
   command = /usr/bin/true
 [url "ssh://git@github.com"]
-	insteadOf = https://github.com
+  insteadOf = https://github.com
+
