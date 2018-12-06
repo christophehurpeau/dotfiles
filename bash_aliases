@@ -44,7 +44,7 @@ function y() {
   fi
 }
 
-alias yui='y && yarn upgrade-interactive --latest && yarn-tools fix-duplicates yarn.lock > yarn-fixed.lock && mv -f yarn-fixed.lock yarn.lock && yarn --prefer-offline'
+alias yui='y && yarn upgrade-interactive --latest && npx yarn-deduplicate `npx find-up-cli yarn.lock` && yarn --prefer-offline'
 alias yu='yui && yarn upgrade'
 alias yr='yarn run'
 alias s='yarn start'
