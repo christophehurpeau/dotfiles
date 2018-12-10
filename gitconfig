@@ -62,6 +62,7 @@
   # branch
   create-branch = !git-create-branch
   rename = branch -m
+  clean-merged ="!git for-each-ref refs/heads/ '--format=%(refname:short)' | while read branch; do mergeBase=$(git merge-base master $branch) && [[ $(git cherry master $(git commit-tree $(git rev-parse $branch^{tree}) -p $mergeBase -m _)) == "-"* ]] && g branch -D $branch; done"
   # commit
   amend = commit --amend --reset-author
   c = commit
