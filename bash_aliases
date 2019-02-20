@@ -74,3 +74,7 @@ function nano () {
     fi
     /usr/bin/nano --mouse --tabstospaces --tabsize=4 --autoindent $*
 }
+
+
+alias setupdns='networksetup -setdnsservers Wi-Fi 1.1.1.1 1.0.0.1 2606:4700:4700::1111 2606:4700:4700::1001'
+alias removesetupdns='networksetup -setdnsservers Wi-Fi "Empty"'
