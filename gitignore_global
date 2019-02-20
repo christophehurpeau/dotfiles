@@ -23,6 +23,10 @@ bower_components
 ## jspm
 jspm_packages
 
+
+#custom npmrc
+.npmrc
+
 #*
 *$
 *.BAK
