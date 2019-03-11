@@ -62,7 +62,7 @@
   # branch
   create-branch = !git-create-branch
   rename = branch -m
-  clean-merged ="!git for-each-ref refs/heads/ '--format=%(refname:short)' | while read branch; do mergeBase=$(git merge-base master $branch) && [[ $(git cherry master $(git commit-tree $(git rev-parse $branch^{tree}) -p $mergeBase -m _)) == "-"* ]] && g branch -D $branch; done"
+  clean-merged ="!git for-each-ref refs/heads/ '--format=%(refname:short)' | while read branch; do mergeBase=$(git merge-base master $branch) && [[ $(git cherry master $(git commit-tree $(git rev-parse $branch^{tree}) -p $mergeBase -m _)) == "-"* ]] && git branch -D $branch; done"
   # commit
   amend = commit --amend --reset-author
   c = commit
@@ -72,6 +72,7 @@
   ob = checkout -b
   master = checkout -B master origin/master
   om = !git fetch origin master && git checkout origin/master
+  o- = o -
   # cherry-pick
   pk = cherry-pick
   # diff
@@ -87,6 +88,7 @@
   l = !git --no-pager log --color --graph --pretty="tformat:'%Cred%h\t%Creset\t%C(green)%cr\t%C(magenta)%an\t%Creset%s %C(yellow)%d%Creset'" --abbrev-commit -9 | column -ts'\t'
   l19 = !git --no-pager log --color --graph --pretty="tformat:'%Cred%h\t%Creset\t%C(green)%cr\t%C(magenta)%an\t%Creset%s %C(yellow)%d%Creset'" --abbrev-commit -19 | column -ts'\t'
   lb = "!git for-each-ref --sort=-committerdate refs/heads --format='%(HEAD)%(color:yellow)%(refname:short)\t%(color:green)%(committerdate:relative)\t%(color:magenta)%(authorname)\t%(color:reset)%(subject)%(color:reset)' | column -ts'\t'"
+  lob = "!git branch -r | grep -v HEAD | while read b; do git log --color --format='%ci _%C(magenta)%cr\t %C(bold cyan)'$b'%Creset %s %C(bold blue)<%an>%Creset' $b | head -n 1; done | sort -r | cut -d_ -f2- | sed 's;origin/;;g' | head -10"
   # pull
   pl = pull
   plu = pull -u
@@ -105,6 +107,7 @@
 
 [merge]
   stat = true
+	tool = code
 
 [filter "hawser"]
   clean = git hawser clean %f
