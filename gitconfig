@@ -4,8 +4,8 @@
   smudge = git media smudge %f
 
 [user]
-	name = Christophe Hurpeau
-	email = christophe@hurpeau.com
+  name = Christophe Hurpeau
+  email = christophe@hurpeau.com
   signingkey = 534C9ACA
 
 [push]
@@ -107,7 +107,7 @@
 
 [merge]
   stat = true
-	tool = code
+  tool = code
 
 [filter "hawser"]
   clean = git hawser clean %f
