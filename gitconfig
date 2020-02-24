@@ -98,12 +98,14 @@
   phu = push -u
   phf = push --force-with-lease
   backup = push --mirror backup
-  # pull + push
-  pp = !git pull && git push
   # reset
   unstage = reset HEAD
   # status
   st = status --short --branch
+  # pull + push
+  pp = !git pull && git push
+  # add + commit
+  acm = !git aa && git cm
 
 [merge]
   stat = true
