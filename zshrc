@@ -4,12 +4,12 @@ export LANG=en_US.UTF-8
 
 # Preferred editor for local and remote sessions
 if [[ -n $SSH_CONNECTION ]]; then
-  export EDITOR='webstorm'
+  export EDITOR='code'
 else
   export EDITOR='nano'
 fi
 
-export REACT_EDITOR='webstorm'
+export REACT_EDITOR='code'
 
 # Source Prezto.
 if [[ -s "${ZDOTDIR:-$HOME}/.zprezto/init.zsh" ]]; then
