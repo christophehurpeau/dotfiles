@@ -11,10 +11,19 @@ fi
 
 export REACT_EDITOR='code'
 
+# https://github.com/romkatv/powerlevel10k/issues/563
+# Change cursor to I-beam
+printf '\033[5 q\r'
+
+# Move prompt to the bottom
+printf '\n%.0s' {1..100}
+
 # Source Prezto.
 if [[ -s "${ZDOTDIR:-$HOME}/.zprezto/init.zsh" ]]; then
   source "${ZDOTDIR:-$HOME}/.zprezto/init.zsh"
 fi
+
+source ~/config-gitted/p10k.zsh
 
 source ~/config-gitted/bash_aliases
 source ~/.bash_aliases
@@ -31,10 +40,7 @@ fi
 #   eval $(gpg-agent --daemon --write-env-file ~/.gpg-agent-info --allow-preset-passphrase)
 # fi
 
-# test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell_integration.zsh"
-
 # https://docs.brew.sh/Shell-Completion
 if type brew &>/dev/null; then
   FPATH=$(brew --prefix)/share/zsh/site-functions:$FPATH
 fi
-

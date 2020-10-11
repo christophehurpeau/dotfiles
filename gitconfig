@@ -6,7 +6,7 @@
 [user]
   name = Christophe Hurpeau
   email = christophe@hurpeau.com
-  signingkey = 534C9ACA
+  signingkey = 3C743FAD898E3548
 
 [push]
   default = current
@@ -70,8 +70,9 @@
   # checkout
   o = checkout
   ob = checkout -b
+  # TODO delete master and use om
   master = checkout -B master origin/master
-  om = !git fetch origin master && git checkout origin/master
+  om = !git fetch origin master && git checkout -B origin/master
   o- = o -
   # cherry-pick
   pk = cherry-pick
@@ -125,9 +126,8 @@
 [commit]
   gpgsign = true
 [tag]
-  gpgsign = true
+#  gpgsign = true
 [diff "nodiff"]
   command = /usr/bin/true
 [url "ssh://git@github.com"]
   insteadOf = https://github.com
-
