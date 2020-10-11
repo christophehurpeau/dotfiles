@@ -93,7 +93,8 @@
   # pull
   pl = pull
   plu = pull -u
-  plom = pull origin master
+  plrom = pull --rebase origin master
+  plnrom = pull --no-rebase origin master
   # push
   ph = push
   phu = push -u
