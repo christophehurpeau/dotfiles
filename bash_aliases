@@ -55,7 +55,6 @@ alias yb='yarn build'
 alias ybd='yarn build:definitions'
 alias yw='yarn watch'
 alias yl='yarn lint'
-alias webstorm='open -a /Applications/WebStorm.app'
 
 function dockerrm() {
     docker stop $1 ; docker rm $1
