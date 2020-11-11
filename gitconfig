@@ -8,6 +8,9 @@
   email = christophe@hurpeau.com
   signingkey = 3C743FAD898E3548
 
+[init]
+  defaultBranch = main
+
 [push]
   default = current
   followTags = true
