@@ -28,6 +28,8 @@ source ~/config-gitted/p10k.zsh
 source ~/config-gitted/bash_aliases
 source ~/.bash_aliases
 
+export "PATH=$HOME/bin:$HOME/config-gitted/bin:$PATH"
+
 if [[ -f ~/.env ]]; then
   eval $(cat ~/.env | sed 's/^/export /')
 fi
