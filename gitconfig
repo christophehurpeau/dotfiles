@@ -25,6 +25,7 @@
   ignoreDate = true
 
 [core]
+  pager = delta
   editor = nano
   whitespace = trailing-space,space-before-tab,tab-in-indent
   excludesfile = ~/config-gitted/gitignore_global
