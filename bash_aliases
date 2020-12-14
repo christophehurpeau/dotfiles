@@ -1,10 +1,11 @@
-function g() {
-  if [ "$*" = "push -f" ]; then
-    echo "push -f forbidden"
-  else
-    git $*
-  fi
-}
+#function g() {
+#  if [ "$*" = "push -f" ]; then
+#    echo "push -f forbidden"
+#  else
+#    git $*
+#  fi
+#}
+alias g='git'
 
 #function n() {
 #  if [ -f yarn.lock ]; then
@@ -55,10 +56,7 @@ alias yb='yarn build'
 alias ybd='yarn build:definitions'
 alias yw='yarn watch'
 alias yl='yarn lint'
-
-function dockerrm() {
-    docker stop $1 ; docker rm $1
-}
+alias yn='yarn node'
 
 alias weather='curl wttr.in'
 alias mypublicip='curl ipinfo.io/ip'
@@ -77,5 +75,5 @@ function nano () {
 }
 
 
-alias setupdns='networksetup -setdnsservers Wi-Fi 1.1.1.1 1.0.0.1 2606:4700:4700::1111 2606:4700:4700::1001'
-alias removesetupdns='networksetup -setdnsservers Wi-Fi "Empty"'
+alias wifisetupdns='networksetup -setdnsservers Wi-Fi 1.1.1.1 1.0.0.1 2606:4700:4700::1111 2606:4700:4700::1001'
+alias wifiremovesetupdns='networksetup -setdnsservers Wi-Fi "Empty"'
