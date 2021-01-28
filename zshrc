@@ -31,6 +31,9 @@ if [[ -s "${ZDOTDIR:-$HOME}/.zprezto/init.zsh" ]]; then
   source "${ZDOTDIR:-$HOME}/.zprezto/init.zsh"
 fi
 
+# https://github.com/sorin-ionescu/prezto/issues/1876
+unsetopt PATH_DIRS
+
 # TODO make sure in ~/.zshrc this file is not imported
 source ~/config-gitted/p10k.zsh
 
