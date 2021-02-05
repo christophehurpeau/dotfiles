@@ -8,11 +8,7 @@ git fetch -p
 
 # autodetect main branch (usually master or main)
 
-mainBranch=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
-
-if [ "$mainBranch" == "" ]; then
-  mainBranch="master"
-fi
+mainBranch=$(git remote show origin | grep "HEAD branch" | cut -d' ' -f5)
 
 echo "autodetect main branch: $mainBranch"
 
