@@ -74,8 +74,6 @@
   # checkout
   o = checkout
   ob = checkout -b
-  # TODO delete master and use om
-  master = checkout -B master origin/master
   om = !git fetch origin master && git checkout -B origin/master
   o- = o -
   # cherry-pick
