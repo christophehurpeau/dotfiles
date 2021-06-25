@@ -74,7 +74,7 @@
   # checkout
   o = checkout
   ob = checkout -b
-  om = !git fetch origin master && git checkout -B origin/master
+  om = !git fetch origin master && git checkout -B master origin/master
   o- = o -
   # cherry-pick
   pk = cherry-pick
