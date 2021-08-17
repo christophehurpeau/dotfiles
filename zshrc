@@ -46,14 +46,6 @@ export "PATH=$HOME/bin:$HOME/config-gitted/bin:$PATH"
 #   eval $(cat ~/.env | sed 's/^/export /')
 # fi
 
-# gpg agent
-# [ -f ~/.gpg-agent-info ] && source ~/.gpg-agent-info
-# if [ -S "${GPG_AGENT_INFO%%:*}" ]; then
-#   export GPG_AGENT_INFO
-# else
-#   eval $(gpg-agent --daemon --write-env-file ~/.gpg-agent-info --allow-preset-passphrase)
-# fi
-
 # https://docs.brew.sh/Shell-Completion
 if type brew &>/dev/null; then
   FPATH=$(brew --prefix)/share/zsh/site-functions:$FPATH
