@@ -117,6 +117,7 @@
 [merge]
   stat = true
   tool = code
+  conflictstyle = diff3
 
 [filter "hawser"]
   clean = git hawser clean %f
