@@ -123,16 +123,20 @@
   clean = git hawser clean %f
   smudge = git hawser smudge %f
   required = true
+  
 [filter "lfs"]
   clean = git-lfs clean -- %f
   smudge = git-lfs smudge -- %f
   process = git-lfs filter-process
   required = true
+
 [commit]
   gpgsign = true
 [tag]
 #  gpgsign = true
+
 [diff "nodiff"]
   command = /usr/bin/true
+  
 [url "ssh://git@github.com"]
   insteadOf = https://github.com
