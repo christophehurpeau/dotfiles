@@ -1,14 +1,14 @@
-config-gitted
+dotfiles
 =============
 
 My gitted configuration files
 
 ```
-wget -O - https://raw.githubusercontent.com/christophehurpeau/config-gitted/master/install.sh | zsh
+wget -O - https://raw.githubusercontent.com/christophehurpeau/dotfiles/master/remote-install.sh | zsh
 ```
 
 ```
-curl -s https://raw.githubusercontent.com/christophehurpeau/config-gitted/master/install.sh | zsh
+curl -s https://raw.githubusercontent.com/christophehurpeau/dotfiles/master/remote-install.sh | zsh
 ```
 
 With brew:

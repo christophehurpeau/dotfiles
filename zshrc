@@ -35,12 +35,12 @@ fi
 unsetopt PATH_DIRS
 
 # TODO make sure in ~/.zshrc this file is not imported
-source ~/config-gitted/p10k.zsh
+source ~/.dotfiles/p10k.zsh
 
-source ~/config-gitted/bash_aliases
+source ~/.dotfiles/bash_aliases
 source ~/.bash_aliases
 
-export "PATH=$HOME/bin:$HOME/config-gitted/bin:$PATH"
+export "PATH=$HOME/bin:$HOME/dotfiles/bin:$PATH"
 
 # if [[ -f ~/.env ]]; then
 #   eval $(cat ~/.env | sed 's/^/export /')

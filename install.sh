@@ -1,5 +1,7 @@
 #!/bin/zsh
 
+BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 sudo chsh -s /bin/zsh $USER
 
 git clone --recursive https://github.com/sorin-ionescu/prezto.git "${ZDOTDIR:-$HOME}/.zprezto"
@@ -9,19 +11,13 @@ for rcfile in "${ZDOTDIR:-$HOME}"/.zprezto/runcoms/^README.md(.N); do
   ln -s "$rcfile" "${ZDOTDIR:-$HOME}/.${rcfile:t}"
 done
 
-
-git clone git@github.com:christophehurpeau/config-gitted.git ~/config-gitted/ || git clone https://github.com/christophehurpeau/config-gitted.git ~/config-gitted/
-
-ln -s ~/config-gitted/gitconfig ~/.gitconfig
+ln -s "$BASEDIR/gitconfig" ~/.gitconfig
 touch ~/.bash_aliases
 rm ~/.zshrc
 rm ~/.zpreztorc
-ln -s ~/config-gitted/zpreztorc ~/.zpreztorc
+ln -s "$BASEDIR/zpreztorc" ~/.zpreztorc
 
-if [ -f ~/.config/sublime-text-3/Packages/User/Preferences.sublime-settings ]; then
-  rm ~/.config/sublime-text-3/Packages/User/Preferences.sublime-settings ; ln -s ~/config-gitted/Preferences.sublime-settings ~/.config/sublime-text-3/Packages/User/Preferences.sublime-settings
-fi
-echo 'source ~/config-gitted/bashrc' >> ~/.bashrc
-echo 'source ~/config-gitted/zshrc' >> ~/.zshrc
+echo 'source "$BASEDIR/bashrc"' >> ~/.bashrc
+echo 'source "$BASEDIR/zshrc"' >> ~/.zshrc
 
 source ~/.zshrc

@@ -28,9 +28,9 @@
   pager = delta
   editor = nano
   whitespace = trailing-space,space-before-tab,tab-in-indent
-  excludesfile = ~/config-gitted/gitignore_global
+  excludesfile = ~/.dotfiles/gitignore_global
+  attributesfile = ~/.dotfiles/.gitattributes
   ignorecase = false
-  attributesfile = /Users/chris/config-gitted/.gitattributes
 
 [web]
   browser = firefox
