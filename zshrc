@@ -40,7 +40,7 @@ source ~/.dotfiles/p10k.zsh
 source ~/.dotfiles/bash_aliases
 source ~/.bash_aliases
 
-export "PATH=$HOME/bin:$HOME/dotfiles/bin:$PATH"
+export "PATH=$HOME/bin:$HOME/.dotfiles/bin:$PATH"
 
 # if [[ -f ~/.env ]]; then
 #   eval $(cat ~/.env | sed 's/^/export /')
