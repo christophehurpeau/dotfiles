@@ -2,6 +2,11 @@
 
 BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# for github codespaces
+if [ "$BASEDIR" != "$HOME/.dotfiles" ]; then 
+  ln -s "$BASEDIR" "$HOME/.dotfiles"
+fi
+
 sudo chsh -s /bin/zsh $USER
 
 git clone --recursive https://github.com/sorin-ionescu/prezto.git "${ZDOTDIR:-$HOME}/.zprezto"
