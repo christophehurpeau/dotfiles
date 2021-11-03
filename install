@@ -17,7 +17,7 @@ rm ~/.zshrc
 rm ~/.zpreztorc
 ln -s "$BASEDIR/zpreztorc" ~/.zpreztorc
 
-echo 'source "$BASEDIR/bashrc"' >> ~/.bashrc
-echo 'source "$BASEDIR/zshrc"' >> ~/.zshrc
+echo "source \"$BASEDIR/bashrc\"" >> ~/.bashrc
+echo "source \"$BASEDIR/zshrc\"" >> ~/.zshrc
 
 source ~/.zshrc
