@@ -13,7 +13,7 @@ mainBranch=$(git remote show origin | grep "HEAD branch" | cut -d' ' -f5)
 echo "autodetect main branch: $mainBranch"
 
 # Delete merged branches with merge commit
-git branch --merged "$mainBranch" | cut -b 3- | (grep --invert-match -F "$mainBranch" || echo) | xargs -r git branch -d
+git branch --merged "$mainBranch" | cut -b 3- | (grep --invert-match -F "$mainBranch" || echo) | xargs -r git branch -d || true
 
 # https://github.com/ggilder/dotfiles/blob/master/bin/git-delete-merged-branches
 # Two strategies for deleting merged branches:
@@ -21,7 +21,7 @@ git branch --merged "$mainBranch" | cut -b 3- | (grep --invert-match -F "$mainBr
 # Delete branches whose diff from merge-base matches a commit on master
 # i.e. branches merged in a single squashed commit
 # based on https://github.com/not-an-aardvark/git-delete-squashed
-git for-each-ref refs/heads/ "--format=%(refname:short)" | while read -r branch; do 
+git for-each-ref refs/heads/ "--format=%(refname:short)" | while read -r branch; do
   mergeBase=$(git merge-base "$mainBranch" "$branch") \
   && [[ $(git cherry "$mainBranch" "$(git commit-tree "$(git rev-parse "$branch^{tree}")" -p "$mergeBase" -m _)") == "-"* ]] \
   && git branch -D "$branch" \
