@@ -31,6 +31,7 @@
   excludesfile = ~/.dotfiles/gitignore_global
   attributesfile = ~/.dotfiles/.gitattributes
   ignorecase = false
+	autocrlf = false
 
 [web]
   browser = firefox
@@ -123,7 +124,7 @@
   clean = git hawser clean %f
   smudge = git hawser smudge %f
   required = true
-  
+
 [filter "lfs"]
   clean = git-lfs clean -- %f
   smudge = git-lfs smudge -- %f
@@ -137,6 +138,6 @@
 
 [diff "nodiff"]
   command = /usr/bin/true
-  
+
 [url "ssh://git@github.com"]
   insteadOf = https://github.com
