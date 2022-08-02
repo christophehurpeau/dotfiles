@@ -7,10 +7,7 @@ set -e
 git fetch -p
 
 # autodetect main branch (usually master or main)
-
 mainBranch=$(git remote show origin | grep "HEAD branch" | cut -d' ' -f5)
-
-echo "autodetect main branch: $mainBranch"
 
 # Delete merged branches with merge commit
 git branch --merged "$mainBranch" | cut -b 3- | (grep --invert-match -F "$mainBranch" || echo) | xargs -r git branch -d || true

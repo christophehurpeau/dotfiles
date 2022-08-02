@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+# exit when any command fails
+set -e
+
+# fetch origin
+git fetch origin
+
+# autodetect main branch (usually master or main)
+mainBranch=$(git remote show origin | grep "HEAD branch" | cut -d' ' -f5)
+
+if [[ "$mainBranch" != "main" ]]; then
+  echo "autodetect main branch: $mainBranch"
+fi
+
+git checkout -B "$mainBranch" "origin/$mainBranch"

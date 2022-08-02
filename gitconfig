@@ -74,8 +74,7 @@
   # checkout
   o = checkout
   ob = checkout -b
-  main = !git fetch origin main && git checkout -B main origin/main && git-clean-merged-branches
-  master = !git fetch origin master && git checkout -B master origin/master && git-clean-merged-branches
+  main = !git-checkout-latest-main && git-clean-merged-branches
   o- = o -
   # cherry-pick
   pk = cherry-pick
