@@ -1,2 +1,1 @@
-brew tap homebrew/cask-fonts
-brew cask install font-ubuntu-mono-derivative-powerline font-ubuntu-nerd-font-mono
+brew install --cask font-cascadia-code font-cascadia-code-pl font-cascadia-mono font-cascadia-mono-pl
