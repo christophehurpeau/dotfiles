@@ -1,123 +1,15 @@
+# Legacy gitconfig alias support
+[include]
+  path = ~/.dotfiles/git/gitconfig-entrypoint.ini
+
 [filter "media"]
   required = true
   clean = git media clean %f
   smudge = git media smudge %f
 
-[user]
-  name = Christophe Hurpeau
-  email = christophe@hurpeau.com
-  signingkey = 3C743FAD898E3548
-
-[init]
-  defaultBranch = main
-
-[push]
-  default = current
-  followTags = true
-
-[pull]
-  rebase = true
-
-[rebase]
-  autoStash = true
-  missingCommitsCheck = warn
-  abbreviateCommands = true
-  ignoreDate = true
-
-[core]
-  pager = delta
-  editor = nano
-  whitespace = trailing-space,space-before-tab,tab-in-indent
-  excludesfile = ~/.dotfiles/gitignore_global
-  attributesfile = ~/.dotfiles/.gitattributes
-  ignorecase = false
-	autocrlf = false
-
-[web]
-  browser = firefox
-
-[color]
-  ui = auto # covers diff = true, status = auto, branch = auto
-  interactive = auto
-
-[pager]
-  diff = false
-
 [diff]
   tool = meld
   compactionHeuristic = true
-
-[difftool]
-  prompt = false
-
-[branch]
-  autosetuprebase = always
-
-[remote]
-  pushDefault = origin
-
-[alias]
-  # aliases
-  aliases = !git config --list | grep 'alias\\.' | sed 's/alias\\.\\([^=]*\\)=\\(.*\\)/\\1\\\t => \\2/' | sort
-  # wip/unwip
-  wip = "!git add -A; git rm $(git ls-files --deleted) 2> /dev/null; git commit --no-verify -m 'feat: --wip-- [skip ci]'"
-  unwip = "!git log -n 1 | grep -q -c '\\-\\-wip\\-\\-' && git reset HEAD~1"
-  # add
-  aa = add --all :/
-  # branch
-  create-branch = !git-create-branch
-  rename = branch -m
-  # commit
-  amend = commit --amend --reset-author
-  c = commit
-  cm = commit -m
-  # checkout
-  o = checkout
-  ob = checkout -b
-  main = !git-checkout-latest-main && git-clean-merged-branches
-  o- = o -
-  # cherry-pick
-  pk = cherry-pick
-  # diff
-  d = "diff --minimal --word-diff=color --word-diff-regex='[^[:space:],;=(){}?]+|[,;=(){}?]+'"
-  conflicts-list = diff --name-only --diff-filter=U
-  conflicts-edit = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; editor `f`"
-  conflicts-add = "!f() { git diff --name-status --diff-filter=U | cut -f2 ; }; git add `f`"
-  # fetch
-  f = fetch
-  fo = fetch origin
-  fu = fetch upstream
-  # log
-  l = !git --no-pager log --color --graph --pretty="tformat:'%Cred%h\t%Creset\t%C(green)%cr\t%C(magenta)%an\t%Creset%s %C(yellow)%d%Creset'" --abbrev-commit -9 | column -ts'\t'
-  l19 = !git --no-pager log --color --graph --pretty="tformat:'%Cred%h\t%Creset\t%C(green)%cr\t%C(magenta)%an\t%Creset%s %C(yellow)%d%Creset'" --abbrev-commit -19 | column -ts'\t'
-  l29 = !git --no-pager log --color --graph --pretty="tformat:'%Cred%h\t%Creset\t%C(green)%cr\t%C(magenta)%an\t%Creset%s %C(yellow)%d%Creset'" --abbrev-commit -29 | column -ts'\t'
-  l49 = !git --no-pager log --color --graph --pretty="tformat:'%Cred%h\t%Creset\t%C(green)%cr\t%C(magenta)%an\t%Creset%s %C(yellow)%d%Creset'" --abbrev-commit -49 | column -ts'\t'
-  l99 = !git --no-pager log --color --graph --pretty="tformat:'%Cred%h\t%Creset\t%C(green)%cr\t%C(magenta)%an\t%Creset%s %C(yellow)%d%Creset'" --abbrev-commit -99 | column -ts'\t'
-  lb = "!git for-each-ref --sort=-committerdate refs/heads --color --format='%(HEAD)%(color:yellow)%(refname:short)\t%(color:green)%(committerdate:relative)\t%(color:magenta)%(authorname)\t%(color:reset)%(subject)%(color:reset)' | column -ts'\t'"
-  lob = "!git branch -r | grep -v HEAD | while read b; do git log --color --format='%ci _%C(magenta)%cr\t %C(bold cyan)'$b'%Creset\t %s %C(bold blue)<%an>%Creset' $b | head -n 1; done | sort -r | cut -d_ -f2- | sed 's;origin/;;g' | head -10 | column -ts'\t'"
-  # pull
-  pl = pull
-  plu = pull -u
-  plrom = pull --rebase origin master
-  plnrom = pull --no-rebase origin master
-  # push
-  ph = push
-  phu = push -u
-  phf = push --force-with-lease
-  backup = push --mirror backup
-  # reset
-  unstage = reset HEAD
-  # status
-  st = status --short --branch
-  # pull + push
-  pp = !git pull && git push
-  # add + commit
-  acm = !git aa && git cm
-
-[merge]
-  stat = true
-  tool = code
-  conflictstyle = diff3
 
 [filter "hawser"]
   clean = git hawser clean %f
@@ -130,13 +22,5 @@
   process = git-lfs filter-process
   required = true
 
-[commit]
-  gpgsign = true
-[tag]
-#  gpgsign = true
-
 [diff "nodiff"]
   command = /usr/bin/true
-
-[url "ssh://git@github.com"]
-  insteadOf = https://github.com

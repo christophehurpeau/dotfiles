@@ -3,7 +3,7 @@
 BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # for github codespaces
-if [ "$BASEDIR" != "$HOME/.dotfiles" ]; then 
+if [ "$BASEDIR" != "$HOME/.dotfiles" ]; then
   ln -s "$BASEDIR" "$HOME/.dotfiles"
 fi
 
@@ -16,7 +16,9 @@ for rcfile in "${ZDOTDIR:-$HOME}"/.zprezto/runcoms/^README.md(.N); do
   ln -s "$rcfile" "${ZDOTDIR:-$HOME}/.${rcfile:t}"
 done
 
-ln -s "$BASEDIR/gitconfig" ~/.gitconfig
+if [ ! -f ~/.gitconfig ]; then
+  echo "[include]\n  path = ~/.dotfiles/git/gitconfig-entrypoint" > ~/.gitconfig
+fi
 touch ~/.bash_aliases
 rm ~/.zshrc
 rm ~/.zpreztorc
