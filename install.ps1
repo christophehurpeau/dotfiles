@@ -10,3 +10,15 @@ if (-not (Test-Path "${env:USERPROFILE}\.gitignore")) {
 if (-not (Test-Path $PROFILE.CurrentUserAllHosts\profile.ps1)) {
   Write-Output ". ${env:USERPROFILE}\.dotfiles\Powershell-Profile\profile.ps1`n. ${env:USERPROFILE}\.dotfiles\Powershell-Profile\psfunctions.ps1`n. ${env:USERPROFILE}\.dotfiles\Powershell-Profile\psaliases.ps1" > $PROFILE.CurrentUserAllHosts
 }
+
+# Winget
+
+# -> NodeJS
+winget install OpenJS.NodeJS.LTS
+
+# Git & Github
+winget install Git.Git
+winget install GitHub.GitHubDesktop
+
+# -> GPG to sign git commits & tags
+winget install GnuPG.Gpg4win
