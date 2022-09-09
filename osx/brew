@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+# exit when any command fails
+set -e
+
+# update command line tools
+brew install zsh bash git
+
+# fonts
+brew install --cask font-cascadia-code font-cascadia-code-pl font-cascadia-mono font-cascadia-mono-pl
+
+# utils
+brew install --cask rectangle
+
+# gpg
+brew install --cask gpg-suite
+
+# keepassxc
+brew install --cask keepassxc
