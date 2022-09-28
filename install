@@ -17,7 +17,7 @@ for rcfile in "${ZDOTDIR:-$HOME}"/.zprezto/runcoms/^README.md(.N); do
 done
 
 if [ ! -f ~/.gitconfig ]; then
-  echo "[include]\n  path = ~/.dotfiles/git/gitconfig-entrypoint" > ~/.gitconfig
+  echo "[include]\n  path = ~/.dotfiles/git/gitconfig-entrypoint.ini" > ~/.gitconfig
 fi
 touch ~/.bash_aliases
 rm ~/.zshrc

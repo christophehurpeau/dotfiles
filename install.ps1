@@ -1,6 +1,6 @@
 # gitconfig
 if (-not (Test-Path "${env:USERPROFILE}\.gitconfig")) {
-  Write-Output "[include]`n  path = ~/.dotfiles/git/gitconfig-entrypoint" > "${env:USERPROFILE}\.gitconfig"
+  Write-Output "[include]`n  path = ~/.dotfiles/git/gitconfig-entrypoint.ini" > "${env:USERPROFILE}\.gitconfig"
 }
 if (-not (Test-Path "${env:USERPROFILE}\.gitignore")) {
   New-Item -Path ${env:USERPROFILE}\.gitignore -ItemType SymbolicLink -Value "${env:USERPROFILE}\.dotfiles\gitignore_global"
