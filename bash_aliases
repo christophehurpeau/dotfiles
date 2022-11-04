@@ -7,35 +7,6 @@
 #}
 alias g='git'
 
-#function n() {
-#  if [ -f yarn.lock ]; then
-#    echo "Use y instead"
-#  else
-#    npm $*
-#  fi
-#}
-alias n='npm'
-
-function nr() {
-  if [ -f yarn.lock ]; then
-    echo "Use yr instead"
-    return 1
-  else
-    npm -s run $*
-  fi
-}
-
-function ni() {
-  if [ -f yarn.lock ]; then
-    echo "Use y instead"
-    return 1
-  else
-    npm i $*
-  fi
-}
-
-# alias nup='ncu -dua && ncu -up && npm i'
-
 function y() {
   if [ -f package-lock.json ]; then
     echo "Use ni instead"
