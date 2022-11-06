@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+
+# exit when any command fails
+set -e
+
+# slugify fn
+
+  # Transliterate everything to ASCII
+  # Strip out apostrophes
+  # Anything that's not a letter or number to a dash
+  # Strip leading & trailing dashes
+function slugify() {
+  iconv -t ascii//TRANSLIT \
+  | tr -d "'" \
+  | sed -E 's/[^a-zA-Z0-9_]+/-/g' \
+  | sed -E 's/^-+|-+$//g'
+}
+
+# allowed types
+types=(
+  'build'
+  'chore'
+  'ci'
+  'docs'
+  'feat'
+  'fix'
+  'perf'
+  'refactor'
+  'revert'
+  'style'
+  'test'
+)
+
+# parse arguments
+
+create_branch=0
+
+if [[ "$1" == "-ob" ]]; then
+  create_branch=1
+  shift # remove $1
+fi
+
+type="$1"
+scope=''
+description_and_body=''
+
+if [[ "$2" == "-s" || "$2" == "--scope" ]]; then
+  scope="$3"
+  description_and_body="${@:4}"
+else
+  description_and_body="${@:2}"
+fi
+
+# Check $type
+
+function is_valid_type() {
+  for x in ${types[@]}; do
+    if [ "$type" = "$x" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+function join_by {
+  local d=${1-} f=${2-}
+  if shift 2; then
+    printf %s "$f" "${@/#/$d}"
+  fi
+}
+
+if ! is_valid_type; then
+  echo "Invalid type. Valid types are:"
+  printf "%s " "${types[@]}"
+  echo
+  exit 1;
+fi
+
+# Check description
+
+if [ -z "$description_and_body" ]; then
+  echo "description cannot be empty"
+  exit 1
+fi
+
+# Create branch if -ob
+
+if [ "$create_branch" = 1 ]; then
+  branch=''
+
+  if [ ! -z "$scope" ]; then
+    branch="$type/$(echo "$scope" | slugify)/$(echo "$description_and_body" | slugify)"
+  else
+    branch="$type/$(echo "$description_and_body" | slugify)"
+  fi
+
+  echo "Create branch $branch"
+  git checkout -b "$branch"
+fi
+
+# do commit
+
+message=''
+
+if [ ! -z "$scope" ]; then
+  message="$type($scope): $description_and_body"
+else
+  message="$type: $description_and_body"
+fi
+
+
+echo "Commit message: $message"
+git commit -m "$message"
