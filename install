@@ -30,7 +30,7 @@ echo "source \"$BASEDIR/zshrc\"" >> ~/.zshrc
 
 # install ssh config
 if [ ! -f ~/.ssh/config ]; then
-  echo "" > ~/.ssh/config
+  echo "Host *\n  ControlMaster auto\n  ControlPath ~/.ssh/naster-%r@%h:%p\n  ServerAliveInterval 5\n  AddKeysToAgent yes\n  UseKeyChain yes\n" > ~/.ssh/config
 fi
 
 source ~/.zshrc

@@ -42,7 +42,7 @@ function nano () {
             fi
         fi
     fi
-    /usr/bin/nano --mouse --tabstospaces --tabsize=4 --autoindent $*
+    /usr/bin/nano $* # --mouse --tabstospaces --tabsize=4 --autoindent $*
 }
 
 

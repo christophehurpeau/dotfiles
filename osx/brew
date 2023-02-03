@@ -27,6 +27,9 @@ brew install --cask rectangle
 brew install --cask keepassxc
 brew install --cask gpg-suite
 
+# Applications
+brew install --cask notion
+
 # Code
 brew install nodejs
 brew install --cask visual-studio-code
