@@ -6,6 +6,9 @@ set -e
 # update command line tools
 brew install zsh bash git
 
+# keepassxc
+brew install --cask keepassxc
+
 # fonts
 brew install --cask font-cascadia-code font-cascadia-code-pl font-cascadia-mono font-cascadia-mono-pl
 
