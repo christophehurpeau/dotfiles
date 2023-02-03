@@ -3,20 +3,30 @@
 # exit when any command fails
 set -e
 
+# install homebrew
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+echo '# Set PATH, MANPATH, etc., for Homebrew.' >> /Users/chris/.zprofile
+echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> /Users/chris/.zprofile
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+
+# iterm2
+brew install --cask iterm2
+
 # update command line tools
 brew install zsh bash git
 
-# keepassxc
-brew install --cask keepassxc
-
 # fonts
-brew install --cask font-cascadia-code font-cascadia-code-pl font-cascadia-mono font-cascadia-mono-pl
+brew install --cask homebrew/cask-fonts/font-cascadia-code homebrew/cask-fonts/font-cascadia-code-pl
+brew install --cask homebrew/cask-fonts/font-cascadia-mono homebrew/cask-fonts/font-cascadia-mono-pl
 
 # utils
 brew install --cask rectangle
 
-# gpg
+# passwords and gpg
+brew install --cask keepassxc
 brew install --cask gpg-suite
 
-# keepassxc
-brew install --cask keepassxc
+# Code
+brew install nodejs
+brew install --cask visual-studio-code
