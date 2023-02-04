@@ -15,6 +15,7 @@ eval "$(/opt/homebrew/bin/brew shellenv)"
 
 # iterm2
 brew install --cask iterm2
+brew install --cask openinterminal
 
 # update command line tools
 brew install zsh bash git
