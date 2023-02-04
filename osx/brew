@@ -3,6 +3,9 @@
 # exit when any command fails
 set -e
 
+# install xcode command line tools
+xcode-select --install
+
 # install homebrew
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 echo '# Set PATH, MANPATH, etc., for Homebrew.' >> /Users/chris/.zprofile
@@ -33,3 +36,10 @@ brew install --cask notion
 # Code
 brew install nodejs
 brew install --cask visual-studio-code
+
+# mongodb
+brew tap mongodb/brew
+brew install mongodb-community@6.0
+# start mongo as a background process
+brew services start mongodb-community@6.0
+# stoppable: brew services stop mongodb-community@6.0
