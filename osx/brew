@@ -34,7 +34,7 @@ brew install --cask gpg-suite
 brew install --cask notion
 
 # Code
-brew install nodejs
+brew install nodejs corepack
 brew install --cask visual-studio-code
 
 # mongodb
