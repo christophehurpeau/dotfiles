@@ -24,6 +24,8 @@ brew install zsh bash git
 brew install --cask homebrew/cask-fonts/font-cascadia-code homebrew/cask-fonts/font-cascadia-code-pl
 brew install --cask homebrew/cask-fonts/font-cascadia-mono homebrew/cask-fonts/font-cascadia-mono-pl
 
+# run `p10k configure` to install meslo font
+
 # utils
 brew install --cask rectangle
 
@@ -37,6 +39,7 @@ brew install --cask notion
 # Code
 brew install nodejs corepack
 brew install --cask visual-studio-code
+brew install watchman
 
 # mongodb
 brew tap mongodb/brew
