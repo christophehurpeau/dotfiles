@@ -41,6 +41,9 @@ brew install nodejs corepack
 brew install --cask visual-studio-code
 brew install watchman
 
+# performance benchmark tool
+brew install hyperfine
+
 # mongodb
 brew tap mongodb/brew
 brew install mongodb-community@6.0
