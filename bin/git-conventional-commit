@@ -15,6 +15,13 @@ function slugify() {
   | sed -E 's/^-+|-+$//g'
 }
 
+# Check if no staged files
+
+if [ -z `git diff --name-only --cached` ]; then
+  echo "No staged files: aborting"
+  exit 4
+fi
+
 # allowed types
 types=(
   'build'
@@ -81,6 +88,7 @@ if [ -z "$description_and_body" ]; then
   echo "description cannot be empty"
   exit 1
 fi
+
 
 # Create branch if -ob
 
