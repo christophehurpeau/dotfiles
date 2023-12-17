@@ -4,11 +4,10 @@
 set -e
 
 # slugify fn
-
-  # Transliterate everything to ASCII
-  # Strip out apostrophes
-  # Anything that's not a letter or number to a dash
-  # Strip leading & trailing dashes
+# Transliterate everything to ASCII
+# Strip out apostrophes
+# Anything that's not a letter or number to a dash
+# Strip leading & trailing dashes
 function slugify() {
   iconv -t ascii//TRANSLIT \
   | tr -d "'" \
@@ -94,8 +93,14 @@ if [ "$create_branch" = 1 ]; then
     branch="$type/$(echo "$description_and_body" | slugify)"
   fi
 
-  echo "Create branch $branch"
-  git checkout -b "$branch"
+  currentBranch=`git rev-parse --abbrev-ref HEAD`
+
+  if [ "$currentBranch" = "$branch" ]; then
+    echo "Skipping branch creation ; already on branch $branch"
+  else
+    echo "Create branch $branch"
+    git checkout -b "$branch"
+  fi
 fi
 
 # do commit
