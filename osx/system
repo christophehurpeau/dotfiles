@@ -19,3 +19,6 @@ defaults write com.apple.desktopservices DSDontWriteUSBStores -bool true
 
 # Disable the warning before emptying the Trash
 defaults write com.apple.finder WarnOnEmptyTrash -bool false
+
+# Enable prefer tabs for vscode to work
+defaults write -app LiveCode AppleWindowTabbingMode -string always
