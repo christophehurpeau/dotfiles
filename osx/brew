@@ -4,7 +4,7 @@
 set -e
 
 # install xcode command line tools
-xcode-select --install
+xcode-select --install || true
 
 # install homebrew
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
@@ -50,3 +50,4 @@ brew install mongodb-community@6.0
 # start mongo as a background process
 brew services start mongodb-community@6.0
 # stoppable: brew services stop mongodb-community@6.0
+
