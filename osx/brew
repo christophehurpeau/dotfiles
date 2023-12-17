@@ -20,6 +20,9 @@ brew install --cask openinterminal
 # update command line tools
 brew install zsh bash git
 
+# in case it was not properly installed initialy
+brew install git-delta
+
 # fonts
 brew install --cask homebrew/cask-fonts/font-cascadia-code homebrew/cask-fonts/font-cascadia-code-pl
 brew install --cask homebrew/cask-fonts/font-cascadia-mono homebrew/cask-fonts/font-cascadia-mono-pl
