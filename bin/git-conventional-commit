@@ -17,7 +17,7 @@ function slugify() {
 
 # Check if no staged files
 
-if [ -z `git diff --name-only --cached` ]; then
+if [ -z "$(git diff --name-only --cached)" ]; then
   echo "No staged files: aborting"
   exit 4
 fi
