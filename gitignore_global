@@ -66,12 +66,11 @@ pids
 ## Compiled binary addons (https://nodejs.org/api/addons.html)
 build/Release
 
-# Typescript
-## v1 declaration files
-typings/
-
 ## Optional REPL history
 .node_repl_history
+
+# Typescript
+local-typings/
 
 # cache
 
