@@ -50,4 +50,4 @@ alias wifisetupdns='networksetup -setdnsservers Wi-Fi 1.1.1.1 1.0.0.1 2606:4700:
 alias wifiremovesetupdns='networksetup -setdnsservers Wi-Fi "Empty"'
 
 
-alias sleepnow="killall Simulator Slack node java ; pmset sleepnow"
+alias sleepnow="killall Simulator Slack node java ; networksetup -setairportpower en0 off ; pmset sleepnow"
