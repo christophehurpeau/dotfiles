@@ -18,8 +18,23 @@ function slugify() {
 # Check if no staged files
 
 if [ -z "$(git diff --name-only --cached)" ]; then
-  echo "No staged files: aborting"
-  exit 4
+  changed_files=`git diff --name-only`
+  if [ -z "$changed_files" ]; then
+    echo "No changed files: aborting"
+    exit 4
+  fi
+
+  echo "No staged files. Changed files:"
+  echo "$changed_files"
+  echo
+
+  read -r -p "Add all changed files? [y/N] " response
+  if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+    git add --all :/
+  else
+    echo "No staged files: aborting"
+    exit 4
+  fi
 fi
 
 # allowed types
