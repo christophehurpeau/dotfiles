@@ -21,7 +21,6 @@ alias yu='yui && yarn upgrade'
 alias ydd='npx yarn-deduplicate `npx find-up-cli yarn.lock` && yarn --prefer-offline'
 alias yr='yarn run'
 alias yd='yarn dev'
-alias s='yarn start'
 alias ys='yarn start'
 alias yt='yarn test'
 alias yb='yarn build'
@@ -29,6 +28,29 @@ alias ybd='yarn build:definitions'
 alias yw='yarn watch'
 alias yl='yarn lint'
 alias yn='yarn node'
+
+function s() {
+  if [ ! -f package.json ]; then
+    echo "No package.json found"
+    return 1
+  fi
+
+  local startCommand='start'
+  if [ "$(jq '.scripts.dev' package.json)" != "null" ]; then
+    startCommand='dev'
+  fi
+
+  # todo: findup
+  if [ -f package-lock.json ]; then
+    npm run "$startCommand" $*
+  elif [ -f yarn.lock ]; then
+    yarn run "$startCommand" $*
+  else
+    yarn run "$startCommand" $*
+    # echo "No package-lock.json or yarn.lock found"
+    return 1
+  fi
+}
 
 alias weather='curl wttr.in'
 alias mypublicip='curl ipinfo.io/ip'
