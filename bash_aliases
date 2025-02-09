@@ -57,6 +57,8 @@ alias mypublicip='curl ipinfo.io/ip'
 
 # function ssh () {/usr/bin/ssh -t $@ "tmux -CC new -As chris || tmux new -As chris || screen -D -R -S chris || zsh || bash ";}
 
+alias ssh-pwd='ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no'
+
 function nano () {
     if [ $USER != 'root' ]; then
         if [ -f $1 ]; then
