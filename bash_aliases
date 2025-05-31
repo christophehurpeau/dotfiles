@@ -8,7 +8,10 @@
 alias g='git'
 
 function y() {
-  if [ -f package-lock.json ]; then
+  if [ -f bun.lock ]; then
+    echo "Use b instead"
+    return 1
+  elif [ -f package-lock.json ]; then
     echo "Use ni instead"
     return 1
   else
@@ -29,6 +32,9 @@ alias yw='yarn watch'
 alias yl='yarn lint'
 alias yn='yarn node'
 
+alias b='bun'
+alias bi='bun install --save-text-lockfile'
+
 function s() {
   if [ ! -f package.json ]; then
     echo "No package.json found"
@@ -45,6 +51,12 @@ function s() {
     npm run "$startCommand" $*
   elif [ -f yarn.lock ]; then
     yarn run "$startCommand" $*
+  elif [ -f bun.lock ]; then
+    bun run "$startCommand" $*
+    return 1
+  elif [ -f bun.lockb ]; then
+    echo "Invalid bun.lockb found, run 'bun install --save-text-lockfile' to fix"
+    return 1
   else
     yarn run "$startCommand" $*
     # echo "No package-lock.json or yarn.lock found"
