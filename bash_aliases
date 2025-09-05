@@ -19,7 +19,7 @@ function y() {
   fi
 }
 
-alias yui='y && yarn upgrade-interactive --latest'
+alias yui='y && yarn upgrade-interactive'
 alias yu='yui && yarn upgrade'
 alias ydd='npx yarn-deduplicate `npx find-up-cli yarn.lock` && yarn --prefer-offline'
 alias yr='yarn run'
