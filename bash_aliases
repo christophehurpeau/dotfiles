@@ -7,6 +7,11 @@
 #}
 alias g='git'
 
+alias '..'='cd ..'
+alias '...'='cd ../..'
+alias '....'='cd ../../..'
+
+
 function y() {
   if [ -f bun.lock ]; then
     echo "Use b instead"
