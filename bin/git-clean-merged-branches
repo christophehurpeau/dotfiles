@@ -32,3 +32,8 @@ git for-each-ref refs/heads/ "--format=%(refname:short)" | while read -r branch;
 [[ "$branch" == "$mainBranch" ]] && continue
 ([ -z "$(git merge-tree "$(git merge-base "$mainBranch" "$branch")" "$mainBranch" "$branch")" ] && git branch -D "$branch") || true
 done
+
+# Warn of branches whose upstream has been deleted
+git branch --format '%(refname:short) %(upstream:track)' | awk '$2 == "[gone]" { print $1 }' | while read -r branch; do
+  echo "Found gone branch: $branch"
+done
