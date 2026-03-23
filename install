@@ -10,28 +10,22 @@ fi
 # install zsh
 sudo chsh -s /bin/zsh $USER
 
-git clone --recursive https://github.com/sorin-ionescu/prezto.git "${ZDOTDIR:-$HOME}/.zprezto"
-
-setopt EXTENDED_GLOB
-for rcfile in "${ZDOTDIR:-$HOME}"/.zprezto/runcoms/^README.md(.N); do
-  ln -s "$rcfile" "${ZDOTDIR:-$HOME}/.${rcfile:t}"
-done
+# install brew
+## TODO
 
 if [ ! -f ~/.gitconfig ]; then
   echo "[include]\n  path = ~/.dotfiles/git/gitconfig-entrypoint.ini" > ~/.gitconfig
 fi
 touch ~/.bash_aliases
 rm ~/.zshrc
-rm ~/.zpreztorc
-ln -s "$BASEDIR/zpreztorc" ~/.zpreztorc
 
 echo "source \"$BASEDIR/bashrc\"" >> ~/.bashrc
 echo "source \"$BASEDIR/zshrc\"" >> ~/.zshrc
 
 # install ssh config
 if [ ! -f ~/.ssh/config ]; then
-  echo "Host *\n  ControlMaster auto\n  ControlPath ~/.ssh/naster-%r@%h:%p\n  ServerAliveInterval 5\n  AddKeysToAgent yes\n  UseKeyChain yes\n" > ~/.ssh/config
+  echo "Host *\n  ControlMaster auto\n  ControlPath ~/.ssh/main-%r@%h:%p\n  ServerAliveInterval 5\n  AddKeysToAgent yes\n  UseKeyChain yes\n" > ~/.ssh/config
 fi
 
 source ~/.zshrc
-fi
+

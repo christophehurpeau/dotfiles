@@ -17,6 +17,16 @@ eval "$(/opt/homebrew/bin/brew shellenv)"
 brew install --cask iterm2
 brew install --cask openinterminal
 
+# # zimfw https://github.com/zimfw/zimfw
+# brew install --formula zimfw
+
+
+brew tap homebrew/command-not-found
+brew install zsh-syntax-highlighting
+brew install zsh-autosuggestions
+brew install pure
+
+
 # update command line tools
 brew install zsh bash git
 
@@ -30,20 +40,22 @@ brew install git-delta
 brew install --cask homebrew/cask-fonts/font-cascadia-code homebrew/cask-fonts/font-cascadia-code-pl
 brew install --cask homebrew/cask-fonts/font-cascadia-mono homebrew/cask-fonts/font-cascadia-mono-pl
 
-# run `p10k configure` to install meslo font
+# brew install --cask font-meslo-lg-nerd-font
+
+brew install --cask font-jetbrains-mono
+brew install --cask font-sora
 
 # utils
 brew install --cask rectangle
 
-# passwords and gpg
+# passwords
 brew install --cask keepassxc
-brew install --cask gpg-suite
 
 # Applications
 brew install --cask notion
 
 # Code
-brew install nodejs corepack
+brew install nodejs
 brew install --cask visual-studio-code
 brew install watchman
 

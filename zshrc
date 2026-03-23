@@ -1,5 +1,3 @@
-unsetopt share_history
-
 export LANG=en_US.UTF-8
 
 # Preferred editor for local and remote sessions
@@ -10,43 +8,104 @@ else
 fi
 
 export REACT_EDITOR='code'
+export "PATH=$HOME/bin:$HOME/.dotfiles/bin:$PATH:/opt/homebrew/bin"
 
-# https://github.com/romkatv/powerlevel10k/issues/563
+
+autoload -U promptinit; promptinit
+
+
+if [ "$CURSOR_AGENT" != "true" ] && [ "$AGENT" != "true" ] && [ "$AGENT" != "1" ] && [ "$NO_COLOR" != "1" ]; then
+  # https://github.com/zsh-users/zsh-syntax-highlighting/blob/master/INSTALL.md
+  source $(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+  source $(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+fi
+
+
+# optionally define some options
+PURE_CMD_MAX_EXEC_TIME=1
+
+
+# change the path color
+zstyle :prompt:pure:path color white
+
+# change the color for both `prompt:success` and `prompt:error`
+zstyle ':prompt:pure:prompt:*' color cyan
+
+# turn on git stash status
+zstyle :prompt:pure:git:stash show yes
+
+prompt pure
+
+
 # Change cursor to I-beam
 printf '\033[5 q\r'
 
-# Move prompt to the bottom
-printf '\n%.0s' {1..100}
+if [ "$CURSOR_AGENT" != "true" ] && [ "$AGENT" != "true" ] && [ "$AGENT" != "1" ] && [ "$NO_COLOR" != "1" ]; then
+  # exit code
+  # enable prompt substitution so variables are expanded each prompt
+  setopt PROMPT_SUBST
 
-# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
-# Initialization code that may require console input (password prompts, [y/n]
-# confirmations, etc.) must go above this block; everything else may go below.
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  # TODO make sure in ~/.zshrc this file is not imported
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-fi
+  # dynamic error code segment (set by precmd)
+  ERROR_CODE=''
 
-# Source Prezto.
-if [[ -s "${ZDOTDIR:-$HOME}/.zprezto/init.zsh" ]]; then
-  source "${ZDOTDIR:-$HOME}/.zprezto/init.zsh"
-fi
+  # base prompt: error code (if any) + symbol colored by last exit status
+  PROMPT='${ERROR_CODE}%(?.%F{yellow}❯.%F{red}❯)%f '
+  # time
+  PROMPT='%F{yellow}%* '$PROMPT
 
-# https://github.com/sorin-ionescu/prezto/issues/1876
-unsetopt PATH_DIRS
 
-# TODO make sure in ~/.zshrc this file is not imported
-source ~/.dotfiles/p10k.zsh
+  precmd_promptcustom() {
+    local last=$?
+    if (( ${#pipestatus} > 1 )); then
+      local any=0 s
+      for s in "${pipestatus[@]}"; do
+        if (( s != 0 )); then
+          any=1
+          break
+        fi
+      done
+      if (( any )); then
+        ERROR_CODE="%F{red}${(j.|.)pipestatus}%f "
+      else
+        ERROR_CODE=''
+      fi
+    else
+      if (( last != 0 )); then
+        ERROR_CODE="%F{red}${last}%f "
+      else
+        ERROR_CODE=''
+      fi
+    fi
+  }
+  add-zsh-hook precmd precmd_promptcustom
 
-source ~/.dotfiles/bash_aliases
-source ~/.bash_aliases
+  # https://github.com/romkatv/powerlevel10k/issues/563
+  # Move prompt to the bottom
+  printf '\n%.0s' {1..100}
 
-export "PATH=$HOME/bin:$HOME/.dotfiles/bin:$PATH"
+  # https://superuser.com/questions/410965/command-history-in-zsh
 
-# if [[ -f ~/.env ]]; then
-#   eval $(cat ~/.env | sed 's/^/export /')
-# fi
+  setopt INC_APPEND_HISTORY
+  # unsetopt share_history
 
-# https://docs.brew.sh/Shell-Completion
-if type brew &>/dev/null; then
-  FPATH=$(brew --prefix)/share/zsh/site-functions:$FPATH
+  # Others
+
+  source ~/.dotfiles/bash_aliases
+  source ~/.bash_aliases
+
+  # if [[ -f ~/.env ]]; then
+  #   eval $(cat ~/.env | sed 's/^/export /')
+  # fi
+
+  # https://docs.brew.sh/Shell-Completion
+  if type brew &>/dev/null; then
+    FPATH=$(brew --prefix)/share/zsh/site-functions:$FPATH
+  fi
+
+
+  HOMEBREW_COMMAND_NOT_FOUND_HANDLER="$(brew --repository)/Library/Homebrew/command-not-found/handler.sh"
+  if [ -f "$HOMEBREW_COMMAND_NOT_FOUND_HANDLER" ]; then
+    source "$HOMEBREW_COMMAND_NOT_FOUND_HANDLER";
+  fi
+
 fi

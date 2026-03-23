@@ -92,4 +92,4 @@ alias wifisetupdns='networksetup -setdnsservers Wi-Fi 1.1.1.1 1.0.0.1 2606:4700:
 alias wifiremovesetupdns='networksetup -setdnsservers Wi-Fi "Empty"'
 
 
-alias sleepnow="killall Simulator Slack node java Telegram ; networksetup -setairportpower en0 off ; watchman watch-del-all ; pmset sleepnow"
+alias sleepnow="killall Simulator Slack node java Telegram Safari Preview Home Notes Messages Transporter Photos Discord Notion; networksetup -setairportpower en0 off ; watchman watch-del-all ; pmset sleepnow"
