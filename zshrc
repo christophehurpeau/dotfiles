@@ -12,6 +12,7 @@ export "PATH=$HOME/bin:$HOME/.dotfiles/bin:$PATH:/opt/homebrew/bin"
 
 
 autoload -U promptinit; promptinit
+autoload -Uz compinit ; compinit
 
 
 if [ "$CURSOR_AGENT" != "true" ] && [ "$AGENT" != "true" ] && [ "$AGENT" != "1" ] && [ "$NO_COLOR" != "1" ]; then
@@ -96,11 +97,6 @@ if [ "$CURSOR_AGENT" != "true" ] && [ "$AGENT" != "true" ] && [ "$AGENT" != "1" 
   # if [[ -f ~/.env ]]; then
   #   eval $(cat ~/.env | sed 's/^/export /')
   # fi
-
-  # https://docs.brew.sh/Shell-Completion
-  if type brew &>/dev/null; then
-    FPATH=$(brew --prefix)/share/zsh/site-functions:$FPATH
-  fi
 
 
   HOMEBREW_COMMAND_NOT_FOUND_HANDLER="$(brew --repository)/Library/Homebrew/command-not-found/handler.sh"
