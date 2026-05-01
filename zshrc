@@ -19,21 +19,20 @@ if [ "$CURSOR_AGENT" != "true" ] && [ "$AGENT" != "true" ] && [ "$AGENT" != "1" 
   # https://github.com/zsh-users/zsh-syntax-highlighting/blob/master/INSTALL.md
   source $(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
   source $(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+
+
+  # optionally define some options
+  PURE_CMD_MAX_EXEC_TIME=1
+
+  # change the path color
+  zstyle :prompt:pure:path color white
+
+  # change the color for both `prompt:success` and `prompt:error`
+  zstyle ':prompt:pure:prompt:*' color cyan
+
+  # turn on git stash status
+  zstyle :prompt:pure:git:stash show yes
 fi
-
-
-# optionally define some options
-PURE_CMD_MAX_EXEC_TIME=1
-
-
-# change the path color
-zstyle :prompt:pure:path color white
-
-# change the color for both `prompt:success` and `prompt:error`
-zstyle ':prompt:pure:prompt:*' color cyan
-
-# turn on git stash status
-zstyle :prompt:pure:git:stash show yes
 
 prompt pure
 
