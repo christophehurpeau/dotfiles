@@ -8,6 +8,9 @@ xcode-select --install || true
 
 # install homebrew
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+if [ ! -f /Users/chris/.zprofile ]; then
+  touch /Users/chris/.zprofile
+fi
 echo '# Set PATH, MANPATH, etc., for Homebrew.' >> /Users/chris/.zprofile
 echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> /Users/chris/.zprofile
 eval "$(/opt/homebrew/bin/brew shellenv)"
