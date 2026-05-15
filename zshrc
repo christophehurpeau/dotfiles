@@ -135,6 +135,10 @@ if [ "$CURSOR_AGENT" != "true" ] && [ "$AGENT" != "true" ] && [ "$AGENT" != "1" 
   setopt INC_APPEND_HISTORY
   # unsetopt share_history
 
+  # shortcuts for moving by word
+  bindkey "^[[1;3C" forward-word
+  bindkey "^[[1;3D" backward-word
+
   # Others
 
   source ~/.dotfiles/bash_aliases
