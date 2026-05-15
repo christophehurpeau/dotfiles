@@ -76,7 +76,7 @@ if [ "$CURSOR_AGENT" != "true" ] && [ "$AGENT" != "true" ] && [ "$AGENT" != "1" 
 
   # Record command start time so we can compute elapsed time in precmd
   preexec_record_start() {
-    typeset -g custom_cmd_timestamp=$(awk "BEGIN{printf \"%d\", $EPOCHREALTIME*1000}")
+    typeset -g custom_cmd_timestamp=$(( EPOCHREALTIME * 1000 ))
   }
 
   precmd_promptcustom() {
@@ -104,7 +104,7 @@ if [ "$CURSOR_AGENT" != "true" ] && [ "$AGENT" != "true" ] && [ "$AGENT" != "1" 
 
 
     integer elapsedInMs
-    (( elapsedInMs = (EPOCHREALTIME*1000) - ${custom_cmd_timestamp:-$(awk "BEGIN{printf \"%d\", $EPOCHREALTIME*1000}")} ))
+    (( elapsedInMs = (EPOCHREALTIME*1000) - ${custom_cmd_timestamp:-$(( EPOCHREALTIME * 1000 ))} ))
     typeset -g custom_cmd_exec_time=
     (( elapsedInMs > 500 )) && {
       pretty-time-ms-to-var $elapsedInMs "custom_cmd_exec_time"
