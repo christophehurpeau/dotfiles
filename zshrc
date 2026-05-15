@@ -26,6 +26,8 @@ pretty-time-ms-to-var() {
 	typeset -g "${var}"="${human}"
 }
 
+# make sure iterm uses brew site functions even if the wrong zsh is used.
+fpath+=("$(brew --prefix)/share/zsh/site-functions")
 autoload -U promptinit; promptinit
 autoload -Uz compinit ; compinit
 
