@@ -16,6 +16,9 @@ function y() {
   if [ -f bun.lock ]; then
     echo "Use b instead"
     return 1
+  elif [ -f pnpm-lock.yaml ]; then
+    echo "Use pnpm instead"
+    return 1
   elif [ -f package-lock.json ]; then
     echo "Use ni instead"
     return 1
@@ -37,8 +40,23 @@ alias yw='yarn watch'
 alias yl='yarn lint'
 alias yn='yarn node'
 
-alias b='bun'
 alias bi='bun install --save-text-lockfile'
+
+function b() {
+  if [ -f package-lock.json ]; then
+    echo "Use ni instead"
+    return 1
+  elif [ -f pnpm-lock.yaml ]; then
+    echo "Use pnpm instead"
+    return 1
+  elif [ -f yarn.lock ]; then
+    echo "Use y instead"
+    return 1
+  else
+    bun $*
+  fi
+}
+
 
 function s() {
   if [ ! -f package.json ]; then
