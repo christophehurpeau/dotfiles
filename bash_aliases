@@ -52,7 +52,9 @@ function s() {
   fi
 
   # todo: findup
-  if [ -f package-lock.json ]; then
+  if [ -f pnpm-lock.yaml ]; then
+    pnpm run "$startCommand" $*
+  elif [ -f package-lock.json ]; then
     npm run "$startCommand" $*
   elif [ -f yarn.lock ]; then
     yarn run "$startCommand" $*
