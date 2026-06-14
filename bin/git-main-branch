@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+git remote show origin | grep "HEAD branch" | cut -d' ' -f5

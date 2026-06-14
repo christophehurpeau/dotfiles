@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
 # exit when any command fails
-set -e
+set -euo pipefail
 
 # fetch origin and prune
 git fetch -p
 
 # autodetect main branch (usually master or main)
-mainBranch=$(git remote show origin | grep "HEAD branch" | cut -d' ' -f5)
+mainBranch=$(git-main-branch)
 
 # Delete merged branches with merge commit
 git branch --merged "$mainBranch" | cut -b 3- | (grep --invert-match -F "$mainBranch" || echo) | xargs -r git branch -d || true

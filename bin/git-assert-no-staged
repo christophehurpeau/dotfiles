@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+NOCOLOR='\033[0m'
+RED='\033[0;31m'
+
+if ! git diff --cached --quiet; then
+  echo -e "${RED}You have staged files. Please commit or unstage them before running this command.${NOCOLOR}"
+  git diff --cached --name-status
+  exit 1
+fi

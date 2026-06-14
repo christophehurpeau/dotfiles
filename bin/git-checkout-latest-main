@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # exit when any command fails
-set -e
+set -euo pipefail
 
 # ----------------------------------
 # Colors
@@ -37,10 +37,10 @@ git fetch origin
 # ----------------------------------
 
 # autodetect main branch (usually master or main)
-mainBranch=$(git remote show origin | grep "HEAD branch" | cut -d' ' -f5)
+mainBranch=$(git-main-branch)
 
 # check if a commit was not pushed in main branch
-logs=$(git log origin/main..main --pretty="tformat:%Cred%h %Creset %C(green)%cr %C(magenta)%an %Creset%s %C(yellow)%d%Creset")
+logs=$(git log origin/$mainBranch..$mainBranch --pretty="tformat:%Cred%h %Creset %C(green)%cr %C(magenta)%an %Creset%s %C(yellow)%d%Creset")
 
 if [[ "$logs" != "" ]]; then
   echo -e "${ORANGE}Commit was added to main you might want to push it or move it to a branch before resetting main branch:${NOCOLOR}"
