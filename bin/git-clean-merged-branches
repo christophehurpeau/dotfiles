@@ -31,6 +31,11 @@ remove_worktree_for_branch() {
 delete_branch() {
   local branch="$1"
   local flag="$2"
+  # Don't delete a branch that points at exactly the same commit as main with no
+  # other commits (e.g. a freshly created worktree/branch).
+  if [ "$(git rev-parse "$branch")" = "$(git rev-parse "$mainBranch")" ]; then
+    return 0
+  fi
   remove_worktree_for_branch "$branch" || return 0
   git branch "$flag" "$branch" 2>/dev/null || true
 }
