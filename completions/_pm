@@ -1,0 +1,71 @@
+#compdef pm
+# zsh completion for the `pm` package-manager wrapper.
+# Completes aliases, package.json scripts (pm r <TAB>), and local bins (pm x <TAB>).
+
+# Populate `scripts` from the nearest package.json (find-up).
+# Each entry is `name:command` for _describe; colons in the script name are
+# escaped so names like `build:definitions` are not split into name/description.
+_pm_scripts() {
+  local dir="$PWD" pj=""
+  while [[ -n "$dir" ]]; do
+    if [[ -f "$dir/package.json" ]]; then pj="$dir/package.json"; break; fi
+    [[ "$dir" == "/" ]] && break
+    dir="${dir:h}"
+  done
+  [[ -n "$pj" ]] || return 1
+  local -a lines
+  lines=(${(f)"$(jq -r '.scripts // {} | to_entries[] | "\(.key)\t\(.value)"' "$pj" 2>/dev/null)"})
+  scripts=()
+  local line name cmd
+  for line in $lines; do
+    name="${line%%$'\t'*}"
+    cmd="${line#*$'\t'}"
+    scripts+=("${name//:/\\:}:${cmd}")
+  done
+}
+
+# Populate `bins` from the nearest node_modules/.bin (find-up).
+_pm_bins() {
+  local dir="$PWD"
+  while [[ -n "$dir" ]]; do
+    if [[ -d "$dir/node_modules/.bin" ]]; then
+      bins=(${${(f)"$(ls "$dir/node_modules/.bin" 2>/dev/null)"}//:/\\:})
+      return 0
+    fi
+    [[ "$dir" == "/" ]] && break
+    dir="${dir:h}"
+  done
+  return 1
+}
+
+_pm() {
+  local -a aliases scripts bins
+  aliases=(
+    'i:install dependencies'
+    'a:add a dependency'
+    'rm:remove a dependency'
+    'r:run a script'
+    'x:exec a local binary'
+    'b:run the build script'
+    't:run the test script'
+    'd:run the dev script'
+    's:run the start script'
+    'u:update dependencies'
+    'ui:update dependencies interactively'
+  )
+
+  if (( CURRENT == 2 )); then
+    _describe -t aliases 'pm command' aliases
+    _pm_scripts && _describe -t scripts 'script' scripts
+    return
+  fi
+
+  case "${words[2]}" in
+    r|run)
+      _pm_scripts && _describe -t scripts 'script' scripts ;;
+    x|exec)
+      _pm_bins && _describe -t bins 'binary' bins ;;
+  esac
+}
+
+_pm "$@"

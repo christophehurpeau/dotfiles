@@ -27,20 +27,27 @@ function y() {
   fi
 }
 
-alias yui='y && yarn upgrade-interactive'
-alias yu='yui && yarn upgrade'
-alias ydd='npx yarn-deduplicate `npx find-up-cli yarn.lock` && yarn --prefer-offline'
-alias yr='yarn run'
-alias yd='yarn dev'
-alias ys='yarn start'
-alias yt='yarn test'
-alias yb='yarn build'
-alias ybd='yarn build:definitions'
-alias yw='yarn watch'
-alias yl='yarn lint'
-alias yn='yarn node'
+# Deprecated yarn/bun shortcuts: point to the pm equivalent and fail, instead of
+# running yarn/bun in projects that may use a different package manager.
+_use_pm() {
+  echo "Use '$*' instead" >&2
+  return 1
+}
 
-alias bi='bun install --save-text-lockfile'
+alias yui='_use_pm pm ui'
+alias yu='_use_pm pm u'
+alias ydd='_use_pm pm dedupe'
+alias yr='_use_pm pm r'
+alias yd='_use_pm pm d'
+alias ys='_use_pm pm s'
+alias yt='_use_pm pm t'
+alias yb='_use_pm pm b'
+alias ybd='_use_pm pm r build:definitions'
+alias yw='_use_pm pm r watch'
+alias yl='_use_pm pm r lint'
+alias yn='_use_pm pm x node'
+
+alias bi='_use_pm pm i'
 
 function b() {
   if [ -f package-lock.json ]; then
@@ -113,3 +120,44 @@ alias wifiremovesetupdns='networksetup -setdnsservers Wi-Fi "Empty"'
 
 
 alias sleepnow="killall Simulator Slack node java Telegram Safari Preview Home Notes Messages Transporter Photos Discord Notion; networksetup -setairportpower en0 off ; watchman watch-del-all ; pmset sleepnow"
+
+# 4-pane Claude workspace in the current working directory
+#   pane 0,1: default effort
+#   pane 2:   CLAUDE_CODE_EFFORT_LEVEL=medium
+#   pane 3:   CLAUDE_CODE_EFFORT_LEVEL=low
+cwork() {
+  local dir="$PWD"
+  local session="cwork-$(basename "$dir")"
+
+  # restore existing session if it exists
+  if tmux has-session -t "$session" 2>/dev/null; then
+    tmux switch-client -t "$session"
+    return
+  fi
+
+  # Launch claude as each pane's argv (not via send-keys) so we don't race
+  # against .zshrc sourcing / instant-prompt plugins. `exec zsh` keeps the
+  # pane alive with a shell prompt after claude exits.
+  # After `select-layout tiled`, panes land as:
+  #   index 0 = top-left  (high)
+  #   index 1 = top-right (high)
+  #   index 2 = bottom-left  (medium)
+  #   index 3 = bottom-right (low)
+  local p0 p1 p2 p3
+  p0=$(tmux new-session  -d  -s "$session" -c "$dir" -n claude -P -F '#{pane_id}' \
+       'claude; exec zsh')
+  p1=$(tmux split-window -h -t "$p0" -c "$dir" -e CLAUDE_CODE_EFFORT_LEVEL=medium -P -F '#{pane_id}' \
+       'claude; exec zsh')
+  p2=$(tmux split-window -v -t "$p0" -c "$dir"                                    -P -F '#{pane_id}' \
+       'claude; exec zsh')
+  p3=$(tmux split-window -v -t "$p1" -c "$dir" -e CLAUDE_CODE_EFFORT_LEVEL=low    -P -F '#{pane_id}' \
+       'claude; exec zsh')
+  tmux select-layout -t "$session:0" tiled
+  tmux select-pane -t "$p0"
+
+  if [ -n "$TMUX" ]; then
+    tmux switch-client -t "$session"
+  else
+    tmux attach -t "$session"
+  fi
+}

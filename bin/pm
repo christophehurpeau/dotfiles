@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# pm: unified package-manager wrapper for npm / yarn / pnpm / bun.
+#
+# Detects the active package manager (nearest package.json "packageManager"
+# field, else nearest lockfile via find-up) and maps short aliases to the
+# matching command. Unknown subcommands pass through to the detected PM.
+#
+# Aliases: i/install, a/add, rm/remove, r/run, x/exec, b/build, t/test,
+#          d/dev, s/start, u/upgrade.
+#
+# Dependency: jq (for reading the packageManager field).
+
+set -euo pipefail
+
+# Print npm|yarn|pnpm|bun, walking up from $PWD. Exit 1 if nothing found.
+_pm_detect() {
+  local dir="$PWD" pm
+  while :; do
+    if [ -f "$dir/package.json" ]; then
+      pm=$(jq -r '.packageManager // empty' "$dir/package.json" 2>/dev/null || true)
+      if [ -n "$pm" ]; then
+        printf '%s\n' "${pm%%@*}"
+        return 0
+      fi
+    fi
+    if [ -f "$dir/pnpm-lock.yaml" ]; then printf 'pnpm\n'; return 0; fi
+    if [ -f "$dir/yarn.lock" ]; then printf 'yarn\n'; return 0; fi
+    if [ -f "$dir/bun.lock" ] || [ -f "$dir/bun.lockb" ]; then printf 'bun\n'; return 0; fi
+    if [ -f "$dir/package-lock.json" ]; then printf 'npm\n'; return 0; fi
+    [ "$dir" = "/" ] && return 1
+    dir=$(dirname "$dir")
+  done
+}
+
+# Major version of the active yarn (1 = classic, 2+ = berry).
+_pm_yarn_major() {
+  local v
+  v=$(yarn --version 2>/dev/null || echo 1)
+  printf '%s\n' "${v%%.*}"
+}
+
+_pm_usage() {
+  cat <<'EOF'
+pm - unified package manager wrapper (npm / yarn / pnpm / bun)
+
+Usage: pm [command] [args...]
+
+Commands:
+  i, install         install dependencies
+  a, add <pkg>       add a dependency
+  rm, remove <pkg>   remove a dependency
+  r, run <script>    run a package.json script
+  x, exec <bin>      execute a local binary
+  b, build           run the build script
+  t, test            run the test script
+  d, dev             run the dev script
+  s, start           run the start script
+  u, update          update dependencies
+  ui                 update dependencies interactively (errors if unsupported)
+  -h, --help         show this help and the detected PM help
+
+Any other command is passed through to the detected package manager.
+EOF
+}
+
+main() {
+  local sub=""
+  if [ $# -gt 0 ]; then
+    sub="$1"
+  fi
+
+  # Help is handled before detection so `pm --help` works outside a project.
+  case "$sub" in
+    -h|--help|help)
+      _pm_usage
+      local pm
+      if pm=$(_pm_detect 2>/dev/null); then
+        printf '\nDetected package manager: %s\n' "$pm"
+        printf -- '----- %s --help -----\n' "$pm"
+        "$pm" --help || true
+      fi
+      return 0 ;;
+  esac
+
+  local pm
+  if ! pm=$(_pm_detect); then
+    echo "pm: no package manager detected (no packageManager field or lockfile found)" >&2
+    return 1
+  fi
+
+  [ $# -gt 0 ] && shift
+
+  case "$sub" in
+    ""|i|install)
+      case "$pm" in
+        npm)  exec npm install "$@" ;;
+        yarn) exec yarn install "$@" ;;
+        pnpm) exec pnpm install "$@" ;;
+        bun)  exec bun install "$@" ;;
+      esac ;;
+    a|add)
+      case "$pm" in
+        npm)  exec npm install "$@" ;;
+        yarn) exec yarn add "$@" ;;
+        pnpm) exec pnpm add "$@" ;;
+        bun)  exec bun add "$@" ;;
+      esac ;;
+    rm|remove)
+      case "$pm" in
+        npm)  exec npm uninstall "$@" ;;
+        yarn) exec yarn remove "$@" ;;
+        pnpm) exec pnpm remove "$@" ;;
+        bun)  exec bun remove "$@" ;;
+      esac ;;
+    r|run)
+      case "$pm" in
+        npm)  exec npm run "$@" ;;
+        yarn) exec yarn run "$@" ;;
+        pnpm) exec pnpm run "$@" ;;
+        bun)  exec bun run "$@" ;;
+      esac ;;
+    x|exec)
+      case "$pm" in
+        npm)  exec npx "$@" ;;
+        yarn)
+          if [ "$(_pm_yarn_major)" = "1" ]; then exec yarn run "$@"; else exec yarn exec "$@"; fi ;;
+        pnpm) exec pnpm exec "$@" ;;
+        bun)  exec bunx "$@" ;;
+      esac ;;
+    b|build|t|test|d|dev|s|start)
+      local script
+      case "$sub" in
+        b|build) script=build ;;
+        t|test)  script=test ;;
+        d|dev)   script=dev ;;
+        s|start) script=start ;;
+      esac
+      case "$pm" in
+        npm)  exec npm run "$script" "$@" ;;
+        yarn) exec yarn run "$script" "$@" ;;
+        pnpm) exec pnpm run "$script" "$@" ;;
+        bun)  exec bun run "$script" "$@" ;;
+      esac ;;
+    u|update|upgrade)
+      case "$pm" in
+        npm)  exec npm update "$@" ;;
+        yarn)
+          if [ "$(_pm_yarn_major)" = "1" ]; then exec yarn upgrade "$@"; else exec yarn up "$@"; fi ;;
+        pnpm) exec pnpm update "$@" ;;
+        bun)  exec bun update "$@" ;;
+      esac ;;
+    ui|update-interactive|upgrade-interactive)
+      case "$pm" in
+        npm)
+          echo "pm: npm has no interactive upgrade (use 'pm u', or 'pm x npm-check-updates')" >&2
+          return 1 ;;
+        yarn) exec yarn upgrade-interactive "$@" ;;
+        pnpm) exec pnpm update --interactive "$@" ;;
+        bun)
+          echo "pm: bun has no interactive upgrade (use 'pm u')" >&2
+          return 1 ;;
+      esac ;;
+    *)
+      exec "$pm" "$sub" "$@" ;;
+  esac
+}
+
+main "$@"
