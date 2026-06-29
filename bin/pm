@@ -24,7 +24,9 @@ _pm_detect() {
       fi
     fi
     if [ -f "$dir/pnpm-lock.yaml" ]; then printf 'pnpm\n'; return 0; fi
+    if [ -f "$dir/pnpm-workspace.yaml" ]; then printf 'pnpm\n'; return 0; fi
     if [ -f "$dir/yarn.lock" ]; then printf 'yarn\n'; return 0; fi
+    if [ -f "$dir/yarn.yml" ]; then printf 'yarn\n'; return 0; fi
     if [ -f "$dir/bun.lock" ] || [ -f "$dir/bun.lockb" ]; then printf 'bun\n'; return 0; fi
     if [ -f "$dir/package-lock.json" ]; then printf 'npm\n'; return 0; fi
     [ "$dir" = "/" ] && return 1
