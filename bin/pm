@@ -157,7 +157,7 @@ main() {
           echo "pm: npm has no interactive upgrade (use 'pm u', or 'pm x npm-check-updates')" >&2
           return 1 ;;
         yarn) exec yarn upgrade-interactive "$@" ;;
-        pnpm) exec pnpm update --interactive "$@" ;;
+        pnpm) exec pnpm update --latest --interactive "$@" ;;
         bun)
           echo "pm: bun has no interactive upgrade (use 'pm u')" >&2
           return 1 ;;
