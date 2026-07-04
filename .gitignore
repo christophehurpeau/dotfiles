@@ -16,3 +16,5 @@
 ,*
 *.swp
 *.out
+
+/config/cd-paths

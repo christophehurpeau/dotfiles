@@ -1,0 +1,13 @@
+#compdef c
+# zsh completion for the `c` fast-cd function.
+# Completes keys from ~/.dotfiles/config/cd-paths (format: key=path).
+_c() {
+  local -a entries
+  local k v
+  while IFS='=' read -r k v; do
+    entries+=("${k//:/\\:}:${v}")                 # escape colons so keys aren't split
+  done < <(c-path --list 2>/dev/null)
+  (( ${#entries} )) || return 1
+  _describe -t cd-paths 'project' entries
+}
+_c "$@"

@@ -1,0 +1,6 @@
+# Fast-cd targets for the `c` function (format: key=path, no spaces around =).
+# Copy this to `cd-paths` (gitignored, per-machine) and edit.
+# `c` with no argument uses the `default` key.
+default=~/dev
+project1=~/dev/project1
+project2=~/dev/project2

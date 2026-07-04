@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Resolve a fast-cd key to a directory path, or list all entries.
+# A bin cannot cd the parent shell, so the actual `cd` is done by the `c()`
+# shell function (see bash_aliases); this script only resolves/lists paths and
+# feeds the `_c` completion.
+#
+# Config (per-machine, gitignored): ~/.dotfiles/config/cd-paths  -- format: key=path
+#   c-path [key]   print the resolved path for key (default: "default")
+#   c-path --list  print raw `key=path` lines (comments/blanks stripped)
+
+config="${CD_PATHS_CONFIG:-$HOME/.dotfiles/config/cd-paths}"
+
+if [ ! -f "$config" ]; then
+  echo "c: no config at $config (cp ~/.dotfiles/config/cd-paths.example $config)" >&2
+  exit 1
+fi
+
+if [ "${1:-}" = "--list" ]; then
+  while IFS= read -r line; do
+    case "$line" in ''|\#*) continue ;; esac
+    printf '%s\n' "$line"
+  done < "$config"
+  exit 0
+fi
+
+key="${1:-default}"
+while IFS='=' read -r k v; do
+  case "$k" in ''|\#*) continue ;; esac
+  if [ "$k" = "$key" ]; then
+    case "$v" in              # expand leading ~
+      "~/"*) v="$HOME/${v#\~/}" ;;
+      "~")   v="$HOME" ;;
+    esac
+    printf '%s\n' "$v"
+    exit 0
+  fi
+done < "$config"
+
+echo "c: unknown key '$key'" >&2
+exit 1

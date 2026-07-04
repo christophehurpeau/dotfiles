@@ -11,6 +11,16 @@ alias '..'='cd ..'
 alias '...'='cd ../..'
 alias '....'='cd ../../..'
 
+# Fast cd to configured project directories. Path resolution lives in bin/c-path;
+# this shim only performs the cd (a bin cannot change the parent shell's dir).
+# Config (per-machine, gitignored): ~/.dotfiles/config/cd-paths  -- format: key=path
+# `c` with no argument uses the `default` key. Autocomplete: completions/_c
+c() {
+  local target
+  target="$(c-path "${1:-default}")" || return $?
+  cd "$target"
+}
+
 
 function y() {
   if [ -f bun.lock ]; then
