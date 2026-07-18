@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 
-# exit when any command fails
+# Delete local branches (and their worktrees) that are merged into the main
+# branch. Covers three cases:
+#   1. git-only heuristics (ancestor of main, squash-merged, or applying no diff);
+#   2. branches whose PR was merged but no longer patch-matches main because main
+#      moved on, or because the PR gained commits after the local tip.
+# A branch that carries commits beyond what was merged is always kept: possible
+# work-in-progress is never destroyed.
+
 set -euo pipefail
 
 # fetch origin and prune
@@ -9,66 +16,127 @@ git fetch -p
 # autodetect main branch (usually master or main)
 mainBranch=$(git-main-branch)
 
-# git branch -d/-D fails if a worktree references the branch. Try to remove
-# the worktree first; if it has uncommitted changes, leave it (and the branch).
-remove_worktree_for_branch() {
-  local branch="$1"
-  local path
-  path=$(git worktree list --porcelain | awk -v ref="refs/heads/$branch" '
-    /^worktree / { p=$2 }
-    $0 == "branch " ref { print p; exit }
-  ')
-  if [ -n "$path" ]; then
-    if ! git worktree remove "$path" 2>/dev/null; then
-      echo "Worktree at $path has uncommitted changes; leaving branch $branch in place." >&2
-      return 1
-    fi
-  fi
-  return 0
-}
-
-
-delete_branch() {
-  local branch="$1"
-  local flag="$2"
-  # Don't delete a branch that points at exactly the same commit as main with no
-  # other commits (e.g. a freshly created worktree/branch).
-  if [ "$(git rev-parse "$branch")" = "$(git rev-parse "$mainBranch")" ]; then
+# The GitHub CLI lets us recognize branches merged via a squashed PR even once
+# main has moved on. Optional: without it, only the git-only heuristics run.
+#
+# Map of head branch name -> "<prNumber>\t<prHeadOid>\t<mergedAt>" for merged
+# PRs, populated by a single bulk query so gh is hit once regardless of how many
+# local branches exist (per-branch lookups below are local map reads). Only the
+# most recent GIT_CLEAN_PR_LIMIT merged PRs are considered; older merged branches
+# simply fall through to the git-only heuristics or are kept (never wrongly
+# deleted).
+declare -A mergedPrByBranch
+loadMergedPrs() {
+  command -v gh >/dev/null 2>&1 || return 0
+  # Capture stdout; let gh's own stderr reach the terminal. On failure (not a
+  # GitHub repo, unauthenticated, offline) warn and fall back to git-only.
+  local output
+  if ! output=$(gh pr list --state merged --limit "${GIT_CLEAN_PR_LIMIT:-400}" \
+    --json number,headRefName,headRefOid,mergedAt \
+    --jq '.[] | "\(.headRefName)\t\(.number)\t\(.headRefOid)\t\(.mergedAt)"'); then
+    echo "Warning: gh pr list failed (see above); using git-only heuristics." >&2
     return 0
   fi
-  remove_worktree_for_branch "$branch" || return 0
-  git branch "$flag" "$branch" 2>/dev/null || true
+  local branch prNumber prHeadOid mergedAt
+  while IFS=$'\t' read -r branch prNumber prHeadOid mergedAt; do
+    [ -n "$branch" ] || continue
+    # gh returns newest first; keep the first (latest) merge per branch name.
+    [ -n "${mergedPrByBranch[$branch]:-}" ] && continue
+    mergedPrByBranch[$branch]="${prNumber}"$'\t'"${prHeadOid}"$'\t'"${mergedAt}"
+  done <<<"$output"
+}
+loadMergedPrs
+
+# Merged = ancestor of main, or squash-merged as a single commit
+# (https://github.com/not-an-aardvark/git-delete-squashed), or applying no diff
+# to main (covers branches merged in multiple squashed commits).
+isMergedIntoMain() {
+  local branch="$1" mergeBase
+  mergeBase=$(git merge-base "$mainBranch" "$branch") || return 1
+  if git merge-base --is-ancestor "$branch" "$mainBranch"; then return 0; fi
+  if [[ $(git cherry "$mainBranch" "$(git commit-tree "$(git rev-parse "$branch^{tree}")" -p "$mergeBase" -m _)") == "-"* ]]; then return 0; fi
+  [ -z "$(git merge-tree "$mergeBase" "$mainBranch" "$branch")" ]
 }
 
-# Delete merged branches with merge commit
-git branch --merged "$mainBranch" | cut -b 3- | (grep --invert-match -F "$mainBranch" || echo) | while read -r branch; do
-  [ -z "$branch" ] && continue
-  delete_branch "$branch" -d
+# Echoes a deletion reason and returns 0 when the branch is safe to delete;
+# returns 1 to keep it. When a merged PR exists but the local tip has commits
+# beyond the PR head, the branch is KEPT (protecting possible work-in-progress)
+# and a warning is emitted.
+deletionReason() {
+  local branch="$1"
+  if isMergedIntoMain "$branch"; then
+    echo "merged into $mainBranch"
+    return 0
+  fi
+
+  local pr="${mergedPrByBranch[$branch]:-}"
+  [ -n "$pr" ] || return 1
+  local prNumber prHeadOid mergedAt
+  IFS=$'\t' read -r prNumber prHeadOid mergedAt <<<"$pr"
+
+  # The PR head may be absent locally after the prune; fetch it on demand (git,
+  # not gh) so we can compare it against the local tip.
+  if ! git cat-file -e "${prHeadOid}^{commit}" 2>/dev/null; then
+    git fetch --quiet origin "refs/pull/${prNumber}/head" 2>/dev/null || true
+  fi
+  if ! git cat-file -e "${prHeadOid}^{commit}" 2>/dev/null; then
+    echo "Keeping $branch: PR #$prNumber is merged but its head could not be fetched to verify there are no extra local commits." >&2
+    return 1
+  fi
+
+  if git merge-base --is-ancestor "$branch" "$prHeadOid"; then
+    echo "PR #$prNumber merged $mergedAt"
+    return 0
+  fi
+
+  echo "Keeping $branch: PR #$prNumber merged $mergedAt, but local tip has $(git rev-list --count "${prHeadOid}..${branch}") commit(s) beyond the merged PR head (possible work in progress)." >&2
+  return 1
+}
+
+# A branch pointing at exactly main's commit is a freshly created branch or
+# worktree, not a merge leftover: keep it.
+isAtMainTip() {
+  [ "$(git rev-parse "$1")" = "$(git rev-parse "$mainBranch")" ]
+}
+
+# Remove worktrees whose branch is merged into main. No --force: a worktree
+# with uncommitted changes is kept (along with its branch) instead of destroyed.
+git worktree list --porcelain | awk '/^worktree / {p=substr($0,10)} /^branch / {sub("refs/heads/","",$2); print p"\t"$2}' | while IFS=$'\t' read -r path branch; do
+  [[ "$branch" == "$mainBranch" ]] && continue
+  isAtMainTip "$branch" && continue
+  deletionReason "$branch" >/dev/null || continue
+  if ! git worktree remove "$path" 2>/dev/null; then
+    echo "Worktree at $path has uncommitted changes; leaving branch $branch in place." >&2
+  fi
 done
 
-# https://github.com/ggilder/dotfiles/blob/master/bin/git-delete-merged-branches
-# Two strategies for deleting merged branches:
+# branches checked out in a remaining worktree cannot be deleted
+worktreeBranches=$(git worktree list --porcelain | awk '/^branch / {sub("refs/heads/", "", $2); print $2}')
 
-# Delete branches whose diff from merge-base matches a commit on master
-# i.e. branches merged in a single squashed commit
-# based on https://github.com/not-an-aardvark/git-delete-squashed
+isProtected() {
+  local branch="$1"
+  [[ "$branch" == "$mainBranch" ]] && return 0
+  printf '%s\n' "$worktreeBranches" | grep -Fxq "$branch" && return 0
+  isAtMainTip "$branch"
+}
+
 git for-each-ref refs/heads/ "--format=%(refname:short)" | while read -r branch; do
-[[ "$branch" == "$mainBranch" ]] && continue
-  mergeBase=$(git merge-base "$mainBranch" "$branch") \
-  && [[ $(git cherry "$mainBranch" "$(git commit-tree "$(git rev-parse "$branch^{tree}")" -p "$mergeBase" -m _)") == "-"* ]] \
-  && delete_branch "$branch" -D \
-  || true
+  isProtected "$branch" && continue
+  reason=$(deletionReason "$branch") || continue
+  echo "Deleting $branch ($reason)"
+  git branch -D "$branch" || true
 done
 
-# Delete squashed merges by figuring out branches that would apply no diff to
-# master if merged. This attempts to address branches merged in multiple
-# squashed commits.
-git for-each-ref refs/heads/ "--format=%(refname:short)" | while read -r branch; do
-[[ "$branch" == "$mainBranch" ]] && continue
-([ -z "$(git merge-tree "$(git merge-base "$mainBranch" "$branch")" "$mainBranch" "$branch")" ] && delete_branch "$branch" -D) || true
-done
-
-# Warn of branches whose upstream has been deleted
-git branch --format '%(refname:short) %(upstream:track)' | awk '$2 == "[gone]" { print $1 }' | while read -r branch; do
-  echo "Found gone branch: $branch"
+# Report remaining branches whose upstream is gone, naming the merged PR (number
+# + merge date) when one is found so a stale-but-merged branch is distinguishable
+# from an unmerged one.
+git branch --format '%(refname:short) %(upstream:track)' | while read -r branch track; do
+  [[ "$track" == "[gone]" ]] || continue
+  pr="${mergedPrByBranch[$branch]:-}"
+  if [ -n "$pr" ]; then
+    IFS=$'\t' read -r prNumber _ mergedAt <<<"$pr"
+    echo "Gone branch $branch: merged as PR #$prNumber on $mergedAt (kept: has local commits beyond the merged PR head)."
+  else
+    echo "Gone branch $branch: upstream deleted, no merged PR found."
+  fi
 done
