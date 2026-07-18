@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Usage: github-check-and-run-release-workflow [branch] [workflow-name]
+# Env:   POLL_INTERVAL  seconds between checks while waiting (default 15)
+#        NO_COLOR       set to disable colored output
+BRANCH=${1:-main}
+WORKFLOW_NAME=${2:-Release}
+POLL_INTERVAL=${POLL_INTERVAL:-15}
+
+command -v gh >/dev/null || { echo "gh CLI is required (https://cli.github.com)" >&2; exit 1; }
+command -v jq >/dev/null || { echo "jq is required (https://jqlang.github.io/jq)" >&2; exit 1; }
+
+# --- colors -----------------------------------------------------------------
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && command -v tput >/dev/null && [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]; then
+  BOLD=$(tput bold); DIM=$(tput dim); RESET=$(tput sgr0)
+  RED=$(tput setaf 1); GREEN=$(tput setaf 2); YELLOW=$(tput setaf 3)
+  BLUE=$(tput setaf 4); CYAN=$(tput setaf 6)
+else
+  BOLD=""; DIM=""; RESET=""; RED=""; GREEN=""; YELLOW=""; BLUE=""; CYAN=""
+fi
+
+info()  { printf '%s%s%s\n' "$CYAN" "$1" "$RESET"; }
+warn()  { printf '%s%s%s\n' "$YELLOW" "$1" "$RESET" >&2; }
+error() { printf '%s%s%s\n' "$RED" "$1" "$RESET" >&2; }
+ok()    { printf '%s%s%s\n' "$GREEN" "$1" "$RESET"; }
+rule()  { printf '%s%s%s\n' "$DIM" "----------------------------------------------------------------" "$RESET"; }
+
+# --- context ----------------------------------------------------------------
+REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner) || { error "Unable to detect repo"; exit 1; }
+
+branch_json=$(gh api "/repos/$REPO/branches/$BRANCH") || { error "Branch '$BRANCH' not found in $REPO"; exit 1; }
+SHA=$(printf '%s' "$branch_json" | jq -r '.commit.sha')
+SHORT_SHA=${SHA:0:8}
+COMMIT_TITLE=$(printf '%s' "$branch_json" | jq -r '.commit.commit.message | split("\n")[0]')
+COMMIT_AUTHOR=$(printf '%s' "$branch_json" | jq -r '.commit.commit.author.name // "?"')
+
+printf '%sRepo%s %s  %sBranch%s %s\n' "$BOLD" "$RESET" "$REPO" "$BOLD" "$RESET" "$BRANCH"
+printf '%sCommit%s %s%s%s %s  %s(%s)%s\n' "$BOLD" "$RESET" "$YELLOW" "$SHORT_SHA" "$RESET" "$COMMIT_TITLE" "$DIM" "$COMMIT_AUTHOR" "$RESET"
+
+# --- required status checks (from branch protection, best-effort) -----------
+required_json=$(gh api "/repos/$REPO/branches/$BRANCH/protection/required_status_checks" 2>/dev/null || true)
+if [ -n "$required_json" ]; then
+  required=$(printf '%s' "$required_json" | jq -c '[.contexts[]?, (.checks[]?.context)] | unique')
+else
+  required='[]'
+fi
+
+# --- state fetch ------------------------------------------------------------
+# Populates: runs_json, checks_state, pending_runs, missing_required, failed_runs
+fetch_state() {
+  runs_json=$(gh api "/repos/$REPO/actions/runs?per_page=100&branch=$BRANCH" \
+    --jq "[.workflow_runs[] | select(.head_sha==\"$SHA\")]")
+
+  local check_runs statuses
+  check_runs=$(gh api "/repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs' 2>/dev/null || echo '[]')
+  statuses=$(gh api "/repos/$REPO/commits/$SHA/status" --jq '.statuses' 2>/dev/null || echo '[]')
+
+  # normalize check-runs + commit statuses into [{name,state}] with state in
+  # success | failure | pending
+  checks_state=$(jq -n --argjson cr "$check_runs" --argjson st "$statuses" '
+    ($cr | map({
+      name: .name,
+      state: (if .status != "completed" then "pending"
+              elif (.conclusion | IN("success","skipped","neutral")) then "success"
+              else "failure" end)
+    }))
+    + ($st | map({
+      name: .context,
+      state: (if .state == "success" then "success"
+              elif .state == "pending" then "pending"
+              else "failure" end)
+    }))')
+
+  pending_runs=$(printf '%s' "$runs_json" | jq '[.[] | select(.status != "completed")] | length')
+  failed_runs=$(printf '%s' "$runs_json" | jq '[.[] | select(.status == "completed" and (.conclusion | IN("success","skipped") | not))] | length')
+
+  # Nothing reported at all = CI has not started yet for this commit.
+  local runs_count checks_count
+  runs_count=$(printf '%s' "$runs_json" | jq 'length')
+  checks_count=$(printf '%s' "$checks_state" | jq 'length')
+  nothing_reported=$(( runs_count + checks_count == 0 ? 1 : 0 ))
+
+  # Required checks resolved against reported state:
+  #  - pending  : check exists and is running -> block, keep waiting
+  #  - missing  : check never reported on this SHA. Ambiguous: either CI has
+  #               not started yet, or it is a PR-only check (e.g. reviewflow)
+  #               that never runs on a push. Handled via nothing_reported +
+  #               the startup grace period in the wait loop.
+  local req_states
+  req_states=$(jq -n --argjson req "$required" --argjson cs "$checks_state" '
+    [ $req[] | . as $c | ($cs | map(select(.name == $c)) | first)
+      | (if . == null then "missing" else .state end) ]')
+  pending_required=$(printf '%s' "$req_states" | jq '[.[] | select(. == "pending")] | length')
+  missing_required=$(printf '%s' "$req_states" | jq '[.[] | select(. == "missing")] | length')
+}
+
+print_runs() {
+  local count
+  count=$(printf '%s' "$runs_json" | jq 'length')
+  if [ "$count" -eq 0 ]; then
+    warn "No workflow runs found for this commit."
+    return
+  fi
+  info "Workflow runs ($count):"
+  printf '%s' "$runs_json" | jq -r \
+    --arg g "$GREEN" --arg r "$RED" --arg y "$YELLOW" --arg b "$BLUE" --arg d "$DIM" --arg z "$RESET" '
+    sort_by(.name)[] |
+    (if .status != "completed" then
+        (if .status == "waiting" then {c:$y, s:"waiting (approval)"} else {c:$y, s:.status} end)
+     elif (.conclusion | IN("success","skipped","neutral")) then {c:$g, s:.conclusion}
+     else {c:$r, s:.conclusion} end) as $m |
+    "  \($m.c)●\($z) \(.name)\t\($m.c)\($m.s)\($z)  \($d)\(.html_url)\($z)"' \
+    | column -t -s $'\t' 2>/dev/null || \
+  printf '%s' "$runs_json" | jq -r '.[] | "  \(.name) — \(.status)/\(.conclusion // "-")"'
+}
+
+print_required() {
+  local count
+  count=$(printf '%s' "$required" | jq 'length')
+  [ "$count" -eq 0 ] && return
+  info "Required status checks ($count):"
+  jq -rn --argjson req "$required" --argjson cs "$checks_state" \
+    --arg g "$GREEN" --arg r "$RED" --arg y "$YELLOW" --arg d "$DIM" --arg z "$RESET" '
+    $req[] | . as $c | ($cs | map(select(.name == $c)) | first) as $found |
+    (if $found == null then {c:$d, s:"missing (not run on this commit)"}
+     elif $found.state == "success" then {c:$g, s:"success"}
+     elif $found.state == "pending" then {c:$y, s:"pending"}
+     else {c:$r, s:"failure"} end) as $m |
+    "  \($m.c)● \($m.s)\($z)\t\($c)"' \
+    | column -t -s $'\t' 2>/dev/null || true
+}
+
+# --- wait loop --------------------------------------------------------------
+# STARTUP_WAIT: max seconds to wait for the first check to appear before
+# giving up (avoids hanging forever when all required checks are PR-only).
+STARTUP_WAIT=${STARTUP_WAIT:-120}
+start_epoch=$(date +%s)
+first=1
+startup_timed_out=0
+while true; do
+  fetch_state
+
+  # While nothing has reported yet, CI has not started -> wait (bounded).
+  waiting_startup=0
+  if [ "$nothing_reported" -eq 1 ]; then
+    if [ $(( $(date +%s) - start_epoch )) -lt "$STARTUP_WAIT" ]; then
+      waiting_startup=1
+    else
+      startup_timed_out=1
+    fi
+  fi
+
+  if [ "$first" -eq 1 ] || [ "$pending_runs" -gt 0 ] || [ "$pending_required" -gt 0 ] || [ "$waiting_startup" -eq 1 ]; then
+    rule
+    print_runs
+    print_required
+  fi
+  first=0
+
+  # Block on: in-progress runs, actively-pending required checks, or CI not
+  # started yet. Missing (but reported-elsewhere) required checks do NOT block
+  # -- they are PR-only checks (e.g. reviewflow) absent on a branch push.
+  if [ "$pending_runs" -eq 0 ] && [ "$pending_required" -eq 0 ] && [ "$waiting_startup" -eq 0 ]; then
+    break
+  fi
+
+  waiting_desc=""
+  if [ "$waiting_startup" -eq 1 ]; then
+    waiting_desc="no checks reported yet (CI starting)"
+  else
+    [ "$pending_runs" -gt 0 ] && waiting_desc="$pending_runs run(s) in progress"
+    if [ "$pending_required" -gt 0 ]; then
+      [ -n "$waiting_desc" ] && waiting_desc="$waiting_desc, "
+      waiting_desc="${waiting_desc}$pending_required required check(s) pending"
+    fi
+  fi
+  warn "Waiting: $waiting_desc — re-checking in ${POLL_INTERVAL}s (Ctrl-C to stop)"
+  sleep "$POLL_INTERVAL"
+done
+
+if [ "$startup_timed_out" -eq 1 ]; then
+  error "No checks reported after ${STARTUP_WAIT}s. CI may not be configured for this branch."
+elif [ "$missing_required" -gt 0 ]; then
+  warn "$missing_required required check(s) never reported on this commit (ignored; likely PR-only)."
+fi
+
+rule
+# --- decision ---------------------------------------------------------------
+if [ "$failed_runs" -gt 0 ]; then
+  error "$failed_runs workflow(s) did not succeed for this commit:"
+  printf '%s' "$runs_json" | jq -r \
+    --arg r "$RED" --arg z "$RESET" '
+    .[] | select(.status == "completed" and (.conclusion | IN("success","skipped") | not)) |
+    "  \($r)●\($z) \(.name) — \(.conclusion)  \(.html_url)"'
+  read -r -p "$(printf '%sProceed to trigger %s anyway? (y/N) %s' "$YELLOW" "$WORKFLOW_NAME" "$RESET")" confirm
+else
+  ok "All workflow runs and required checks passed."
+  read -r -p "$(printf 'Trigger %s%s%s on %s? (y/N) ' "$BOLD" "$WORKFLOW_NAME" "$RESET" "$BRANCH")" confirm
+fi
+case "$confirm" in
+  [yY][eE][sS]|[yY]) ;;
+  *) info "Aborted."; exit 0 ;;
+esac
+
+# --- trigger ----------------------------------------------------------------
+info "Triggering workflow '$WORKFLOW_NAME' on ref $BRANCH..."
+gh workflow run "$WORKFLOW_NAME" --ref "$BRANCH"
