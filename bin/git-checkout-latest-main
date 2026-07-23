@@ -25,6 +25,16 @@ WHITE='\033[1;37m'
 
 
 # ----------------------------------
+# Guard: refuse to run inside a linked worktree
+# ----------------------------------
+
+if [[ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]]; then
+  echo -e "${RED}This script cannot be run inside a linked worktree.${NOCOLOR}"
+  exit 1
+fi
+
+
+# ----------------------------------
 # Fetching
 # ----------------------------------
 
