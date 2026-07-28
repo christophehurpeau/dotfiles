@@ -3,10 +3,12 @@ set -euo pipefail
 
 # Usage: github-check-and-run-release-workflow [branch] [workflow-name]
 # Env:   POLL_INTERVAL  seconds between checks while waiting (default 15)
+#        SKIP_CHECKS    set to skip CI checks and trigger the workflow directly
 #        NO_COLOR       set to disable colored output
 BRANCH=${1:-main}
 WORKFLOW_NAME=${2:-Release}
 POLL_INTERVAL=${POLL_INTERVAL:-15}
+SKIP_CHECKS=${SKIP_CHECKS:-}
 
 command -v gh >/dev/null || { echo "gh CLI is required (https://cli.github.com)" >&2; exit 1; }
 command -v jq >/dev/null || { echo "jq is required (https://jqlang.github.io/jq)" >&2; exit 1; }
@@ -37,6 +39,18 @@ COMMIT_AUTHOR=$(printf '%s' "$branch_json" | jq -r '.commit.commit.author.name /
 
 printf '%sRepo%s %s  %sBranch%s %s\n' "$BOLD" "$RESET" "$REPO" "$BOLD" "$RESET" "$BRANCH"
 printf '%sCommit%s %s%s%s %s  %s(%s)%s\n' "$BOLD" "$RESET" "$YELLOW" "$SHORT_SHA" "$RESET" "$COMMIT_TITLE" "$DIM" "$COMMIT_AUTHOR" "$RESET"
+
+if [ -n "$SKIP_CHECKS" ]; then
+  warn "SKIP_CHECKS set — skipping CI status checks."
+  read -r -p "$(printf 'Trigger %s%s%s on %s? (y/N) ' "$BOLD" "$WORKFLOW_NAME" "$RESET" "$BRANCH")" confirm
+  case "$confirm" in
+    [yY][eE][sS]|[yY]) ;;
+    *) info "Aborted."; exit 0 ;;
+  esac
+  info "Triggering workflow '$WORKFLOW_NAME' on ref $BRANCH..."
+  gh workflow run "$WORKFLOW_NAME" --ref "$BRANCH"
+  exit 0
+fi
 
 # --- required status checks (from branch protection, best-effort) -----------
 required_json=$(gh api "/repos/$REPO/branches/$BRANCH/protection/required_status_checks" 2>/dev/null || true)
