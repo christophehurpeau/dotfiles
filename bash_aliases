@@ -21,90 +21,35 @@ c() {
   cd "$target"
 }
 
-
-function y() {
-  if [ -f bun.lock ]; then
-    echo "Use b instead"
-    return 1
-  elif [ -f pnpm-lock.yaml ]; then
-    echo "Use pnpm instead"
-    return 1
-  elif [ -f package-lock.json ]; then
-    echo "Use ni instead"
-    return 1
-  else
-    yarn $*
-  fi
-}
-
 # Deprecated yarn/bun shortcuts: point to the pm equivalent and fail, instead of
 # running yarn/bun in projects that may use a different package manager.
-_use_pm() {
+_use_p() {
   echo "Use '$*' instead" >&2
   return 1
 }
 
-alias yui='_use_pm pm ui'
-alias yu='_use_pm pm u'
-alias ydd='_use_pm pm dedupe'
-alias yr='_use_pm pm r'
-alias yd='_use_pm pm d'
-alias ys='_use_pm pm s'
-alias yt='_use_pm pm t'
-alias yb='_use_pm pm b'
-alias ybd='_use_pm pm r build:definitions'
-alias yw='_use_pm pm r watch'
-alias yl='_use_pm pm r lint'
-alias yn='_use_pm pm x node'
+alias p='pm'
+alias s='pm s'
+alias pi='pm i'
+alias pb='pm b'
+alias pt='pm t'
 
-alias bi='_use_pm pm i'
+alias b='_use_p p'
+alias bi='_use_p p i'
 
-function b() {
-  if [ -f package-lock.json ]; then
-    echo "Use ni instead"
-    return 1
-  elif [ -f pnpm-lock.yaml ]; then
-    echo "Use pnpm instead"
-    return 1
-  elif [ -f yarn.lock ]; then
-    echo "Use y instead"
-    return 1
-  else
-    bun $*
-  fi
-}
-
-
-function s() {
-  if [ ! -f package.json ]; then
-    echo "No package.json found"
-    return 1
-  fi
-
-  local startCommand='start'
-  if [ "$(jq '.scripts.dev' package.json)" != "null" ]; then
-    startCommand='dev'
-  fi
-
-  # todo: findup
-  if [ -f pnpm-lock.yaml ]; then
-    pnpm run "$startCommand" $*
-  elif [ -f package-lock.json ]; then
-    npm run "$startCommand" $*
-  elif [ -f yarn.lock ]; then
-    yarn run "$startCommand" $*
-  elif [ -f bun.lock ]; then
-    bun run "$startCommand" $*
-    return 1
-  elif [ -f bun.lockb ]; then
-    echo "Invalid bun.lockb found, run 'bun install --save-text-lockfile' to fix"
-    return 1
-  else
-    yarn run "$startCommand" $*
-    # echo "No package-lock.json or yarn.lock found"
-    return 1
-  fi
-}
+alias y='_use_p p'
+alias yui='_use_p p ui'
+alias yu='_use_p p u'
+alias ydd='_use_p p dedupe'
+alias yr='_use_p p r'
+alias yd='_use_p p d'
+alias ys='_use_p p s'
+alias yt='_use_p p t'
+alias yb='_use_p p b'
+alias ybd='_use_p p r build:definitions'
+alias yw='_use_p p r watch'
+alias yl='_use_p p r lint'
+alias yn='_use_p p x node'
 
 alias weather='curl wttr.in'
 alias mypublicip='curl ipinfo.io/ip'

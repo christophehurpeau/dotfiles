@@ -27,7 +27,11 @@ _pm_detect() {
     if [ -f "$dir/pnpm-workspace.yaml" ]; then printf 'pnpm\n'; return 0; fi
     if [ -f "$dir/yarn.lock" ]; then printf 'yarn\n'; return 0; fi
     if [ -f "$dir/yarn.yml" ]; then printf 'yarn\n'; return 0; fi
-    if [ -f "$dir/bun.lock" ] || [ -f "$dir/bun.lockb" ]; then printf 'bun\n'; return 0; fi
+    if [ -f "$dir/bun.lock" ]; then printf 'bun\n'; return 0; fi
+    if [ -f "$dir/bun.lockb" ]; then
+      echo "Invalid bun.lockb found, run 'bun install --save-text-lockfile' to fix"
+      return 1
+    fi
     if [ -f "$dir/package-lock.json" ]; then printf 'npm\n'; return 0; fi
     [ "$dir" = "/" ] && return 1
     dir=$(dirname "$dir")
@@ -161,6 +165,23 @@ main() {
         bun)
           echo "pm: bun has no interactive upgrade (use 'pm u')" >&2
           return 1 ;;
+      esac ;;
+    s|start)
+      if [ ! -f package.json ]; then
+        echo "No package.json found"
+        return 1
+      fi
+
+      local startCommand='start'
+      if [ "$(jq '.scripts.dev' package.json)" != "null" ]; then
+        startCommand='dev'
+      fi
+
+      case "$pm" in
+        npm)  exec npm run "$@" ;;
+        yarn) exec yarn run "$@" ;;
+        pnpm) exec pnpm run "$@" ;;
+        bun)  exec bun run "$@" ;;
       esac ;;
     *)
       exec "$pm" "$sub" "$@" ;;
