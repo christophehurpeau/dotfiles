@@ -131,11 +131,6 @@ if [ "$CURSOR_AGENT" != "true" ] && [ "$AGENT" != "true" ] && [ "$AGENT" != "1" 
   # Move prompt to the bottom
   printf '\n%.0s' {1..100}
 
-  # https://superuser.com/questions/410965/command-history-in-zsh
-
-  setopt INC_APPEND_HISTORY
-  # unsetopt share_history
-
   # shortcuts for moving by word
   bindkey "^[[1;3C" forward-word
   bindkey "^[[1;3D" backward-word
@@ -154,5 +149,12 @@ if [ "$CURSOR_AGENT" != "true" ] && [ "$AGENT" != "true" ] && [ "$AGENT" != "1" 
   if [ -f "$HOMEBREW_COMMAND_NOT_FOUND_HANDLER" ]; then
     source "$HOMEBREW_COMMAND_NOT_FOUND_HANDLER";
   fi
-
 fi
+
+
+# https://superuser.com/questions/410965/command-history-in-zsh
+
+setopt INC_APPEND_HISTORY
+# don't record commands prefixed with a space
+setopt HIST_IGNORE_SPACE
+# unsetopt share_history
