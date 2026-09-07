@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+# Internal helper of git-clean-merged-branches, which is the only thing that
+# should call it; the name carries its owner because bin/ is on PATH and this
+# means nothing on its own.
+#
+# Prints, among the branches passed as arguments, those already merged into the
+# base branch:
+#
+#   git-clean-merged-branches_filter-merged main feat/a feat/b
+#
+# It is a separate file rather than a function because answering for one branch
+# costs tens of milliseconds and the branches are independent, so the caller
+# spreads them over the cores with `xargs -P`, which needs something to exec.
+
+set -uo pipefail
+
+baseBranch="$1"
+shift
+
+# Merged = ancestor of the base, or squash-merged as a single commit
+# (https://github.com/not-an-aardvark/git-delete-squashed), or applying no diff
+# to the base (covers branches merged in multiple squashed commits).
+isMergedIntoBase() {
+  local branch="$1" mergeBase squashed
+  mergeBase=$(git merge-base "$baseBranch" "$branch") || return 1
+  if git merge-base --is-ancestor "$branch" "$baseBranch"; then return 0; fi
+  squashed=$(git commit-tree "$(git rev-parse "$branch^{tree}")" -p "$mergeBase" -m _) || return 1
+  if [[ $(git cherry "$baseBranch" "$squashed") == "-"* ]]; then return 0; fi
+  [ -z "$(git -c merge.crypt.driver=false merge-tree "$mergeBase" "$baseBranch" "$branch")" ]
+}
+
+# `${1+"$@"}` and no `set -e`: a broken ref must leave the other branches (and
+# the caller, which reads this through a `pipefail` pipeline) alone. Reporting
+# nothing keeps a branch, which is the safe direction.
+for branch in ${1+"$@"}; do
+  if isMergedIntoBase "$branch"; then echo "$branch"; fi
+done
+
+exit 0

@@ -7,6 +7,8 @@
 #      moved on, or because the PR gained commits after the local tip.
 # A branch that carries commits beyond what was merged is always kept: possible
 # work-in-progress is never destroyed.
+#
+# Usage: git-clean-merged-branches [-n|--dry-run]
 
 set -euo pipefail
 
@@ -22,11 +24,36 @@ if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
   exit 1
 fi
 
-# fetch origin and prune
-git fetch -p
+filterMerged="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/git-clean-merged-branches_filter-merged"
 
-# autodetect main branch (usually master or main)
-mainBranch=$(git-main-branch)
+usage() {
+  cat <<'USAGE'
+Usage: git-clean-merged-branches [-n|--dry-run]
+
+Delete local branches, and their worktrees, that are merged into the main branch.
+
+  -n, --dry-run   Report what would be removed and change nothing. Still
+                  fetches: the answer depends on an up-to-date main, so a
+                  dry run that skipped the fetch could not be trusted.
+USAGE
+}
+
+dryRun=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -n | --dry-run) dryRun=1 ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
 
 # The GitHub CLI lets us recognize branches merged via a squashed PR even once
 # main has moved on. Optional: without it, only the git-only heuristics run.
@@ -37,15 +64,36 @@ mainBranch=$(git-main-branch)
 # most recent GIT_CLEAN_PR_LIMIT merged PRs are considered; older merged branches
 # simply fall through to the git-only heuristics or are kept (never wrongly
 # deleted).
+#
+# The query only talks to the GitHub API, so it runs while git talks to origin
+# and while the merge checks below run; its output is read once the loops need
+# it. Its stderr is held back and replayed then, rather than interleaved with
+# the git output it now runs alongside.
 declare -A mergedPrByBranch
-loadMergedPrs() {
+prQueryPid=""
+prQueryOut=""
+prQueryErr=""
+trap 'rm -f ${prQueryOut:+"$prQueryOut"} ${prQueryErr:+"$prQueryErr"}' EXIT
+
+startMergedPrsQuery() {
   command -v gh >/dev/null 2>&1 || return 0
-  # Capture stdout; let gh's own stderr reach the terminal. On failure (not a
-  # GitHub repo, unauthenticated, offline) warn and fall back to git-only.
-  local output
-  if ! output=$(gh pr list --state merged --limit "${GIT_CLEAN_PR_LIMIT:-400}" \
+  prQueryOut=$(mktemp)
+  prQueryErr=$(mktemp)
+  gh pr list --state merged --limit "${GIT_CLEAN_PR_LIMIT:-400}" \
     --json number,headRefName,headRefOid,mergedAt \
-    --jq '.[] | "\(.headRefName)\t\(.number)\t\(.headRefOid)\t\(.mergedAt)"'); then
+    --jq '.[] | "\(.headRefName)\t\(.number)\t\(.headRefOid)\t\(.mergedAt)"' \
+    >"$prQueryOut" 2>"$prQueryErr" &
+  prQueryPid=$!
+}
+
+loadMergedPrs() {
+  [ -n "$prQueryPid" ] || return 0
+  local status=0
+  wait "$prQueryPid" || status=$?
+  if [ -s "$prQueryErr" ]; then cat "$prQueryErr" >&2; fi
+  # On failure (not a GitHub repo, unauthenticated, offline) warn and fall back
+  # to git-only.
+  if [ "$status" -ne 0 ]; then
     echo "Warning: gh pr list failed (see above); using git-only heuristics." >&2
     return 0
   fi
@@ -55,20 +103,90 @@ loadMergedPrs() {
     # gh returns newest first; keep the first (latest) merge per branch name.
     [ -n "${mergedPrByBranch[$branch]:-}" ] && continue
     mergedPrByBranch[$branch]="${prNumber}"$'\t'"${prHeadOid}"$'\t'"${mergedAt}"
-  done <<<"$output"
+  done <"$prQueryOut"
 }
+
+startMergedPrsQuery
+
+# fetch origin and prune
+git fetch -p
+
+# autodetect main branch (usually master or main)
+mainBranch=$(git-main-branch)
+mainCommit=$(git rev-parse "$mainBranch")
+
+# A refname holds no space and no newline, so one line per branch reads back
+# safely; it may hold a quote, hence the NUL separator for xargs below.
+branchList=$(git for-each-ref refs/heads/ "--format=%(objectname) %(refname:short)")
+
+# xargs needs a number and getconf is not guaranteed to answer.
+parallelism=$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)
+case "$parallelism" in "" | *[!0-9]*) parallelism=4 ;; esac
+
+# Answering "is this branch merged?" costs tens of milliseconds, and both loops
+# below ask it of the branches checked out in a worktree. Ask once for every
+# branch, spread over the cores: the branches are independent. The check itself
+# lives in the _filter-merged helper next to this script, so xargs has something
+# to exec; it is addressed by path because it is not a command of its own.
+#
+# A branch pointing at exactly main's commit is a freshly created branch or
+# worktree rather than a merge leftover, so it is filtered out up front (and
+# with it main itself) and never reported as merged.
+# The helper always exits 0, even on a ref it cannot read, so a non-zero status
+# here means the check itself could not run. Say so: discarding it would leave an
+# empty set, and the script would cheerfully report a repository with nothing to
+# clean. Branches stay in place either way, which is the safe direction.
+mergedList=$(
+  printf '%s\n' "$branchList" \
+    | awk -v mainCommit="$mainCommit" 'NF && $1 != mainCommit { printf "%s%c", $2, 0 }' \
+    | xargs -0 -P "$parallelism" -n 1 "$filterMerged" "$mainBranch"
+) || {
+  echo "Warning: the merged-branch check failed (see above); no branch reported as merged." >&2
+  mergedList=""
+}
+
+declare -A mergedIntoMain=()
+while read -r branch; do
+  [ -n "$branch" ] && mergedIntoMain[$branch]=1
+done <<<"$mergedList"
+
+declare -A atMainTip=()
+while read -r objectname branch; do
+  [ "$objectname" = "$mainCommit" ] && atMainTip[$branch]=1
+done <<<"$branchList"
+
+# Merged = ancestor of main, or squash-merged as a single commit, or applying no
+# diff to main; computed above, read here.
+isMergedIntoMain() {
+  [ -n "${mergedIntoMain[$1]:-}" ]
+}
+
+# A branch pointing at exactly main's commit is a freshly created branch or
+# worktree, not a merge leftover: keep it.
+isAtMainTip() {
+  [ -n "${atMainTip[$1]:-}" ]
+}
+
 loadMergedPrs
 
-# Merged = ancestor of main, or squash-merged as a single commit
-# (https://github.com/not-an-aardvark/git-delete-squashed), or applying no diff
-# to main (covers branches merged in multiple squashed commits).
-isMergedIntoMain() {
-  local branch="$1" mergeBase
-  mergeBase=$(git merge-base "$mainBranch" "$branch") || return 1
-  if git merge-base --is-ancestor "$branch" "$mainBranch"; then return 0; fi
-  if [[ $(git cherry "$mainBranch" "$(git commit-tree "$(git rev-parse "$branch^{tree}")" -p "$mergeBase" -m _)") == "-"* ]]; then return 0; fi
-  [ -z "$(git merge-tree "$mergeBase" "$mainBranch" "$branch")" ]
+# The PR heads live under refs/pull/, which the fetch above does not bring in,
+# and the comparison below needs them. Fetching them one at a time inside the
+# loops costs a round trip per branch; ask for the ones we may need in one go.
+# Best effort: deletionReason still fetches on its own whatever is missing.
+prefetchMergedPrHeads() {
+  local refspecs=() branch prNumber prHeadOid
+  while read -r _ branch; do
+    [ -n "$branch" ] || continue
+    [ -n "${mergedPrByBranch[$branch]:-}" ] || continue
+    isMergedIntoMain "$branch" && continue
+    IFS=$'\t' read -r prNumber prHeadOid _ <<<"${mergedPrByBranch[$branch]}"
+    git cat-file -e "${prHeadOid}^{commit}" 2>/dev/null && continue
+    refspecs+=("refs/pull/${prNumber}/head")
+  done <<<"$branchList"
+  [ ${#refspecs[@]} -gt 0 ] || return 0
+  git fetch --quiet origin "${refspecs[@]}" 2>/dev/null || true
 }
+prefetchMergedPrHeads
 
 # Echoes a deletion reason and returns 0 when the branch is safe to delete;
 # returns 1 to keep it. When a merged PR exists but the local tip has commits
@@ -105,45 +223,83 @@ deletionReason() {
   return 1
 }
 
-# A branch pointing at exactly main's commit is a freshly created branch or
-# worktree, not a merge leftover: keep it.
-isAtMainTip() {
-  [ "$(git rev-parse "$1")" = "$(git rev-parse "$mainBranch")" ]
+# A real run lets `git worktree remove` refuse a worktree it must not destroy.
+# A dry run has to predict that refusal to stay faithful, so reproduce it: the
+# command declines a worktree that is locked, or that holds uncommitted or
+# untracked files.
+isRemovableWorktree() {
+  local path="$1" adminDir
+  adminDir=$(git -C "$path" rev-parse --path-format=absolute --git-dir 2>/dev/null) || return 1
+  if [ -e "$adminDir/locked" ]; then return 1; fi
+  [ -z "$(git -C "$path" status --porcelain)" ]
 }
 
 # Remove worktrees whose branch is merged into main. No --force: a worktree
 # with uncommitted changes is kept (along with its branch) instead of destroyed.
-git worktree list --porcelain | awk '/^worktree / {p=substr($0,10)} /^branch / {sub("refs/heads/","",$2); print p"\t"$2}' | while IFS=$'\t' read -r path branch; do
+#
+# Read through a process substitution rather than a pipe so the loop runs in
+# this shell and a dry run can record what it would have removed.
+declare -A wouldRemoveWorktreeBranch=()
+while IFS=$'\t' read -r path branch; do
   [[ "$branch" == "$mainBranch" ]] && continue
   isAtMainTip "$branch" && continue
   deletionReason "$branch" >/dev/null || continue
+  if [ -n "$dryRun" ]; then
+    if isRemovableWorktree "$path"; then
+      echo "Would remove worktree at $path (branch $branch)"
+      wouldRemoveWorktreeBranch[$branch]=1
+    else
+      echo "Worktree at $path has uncommitted changes; leaving branch $branch in place." >&2
+    fi
+    continue
+  fi
   if ! git worktree remove "$path" 2>/dev/null; then
     echo "Worktree at $path has uncommitted changes; leaving branch $branch in place." >&2
   fi
-done
+done < <(git worktree list --porcelain | awk '/^worktree / {p=substr($0,10)} /^branch / {sub("refs/heads/","",$2); print p"\t"$2}')
 
-# branches checked out in a remaining worktree cannot be deleted
-worktreeBranches=$(git worktree list --porcelain | awk '/^branch / {sub("refs/heads/", "", $2); print $2}')
+# Branches checked out in a remaining worktree cannot be deleted. A real run has
+# just removed the worktrees above, so they are gone from this listing; a dry run
+# has to discount them itself, or it would report none of their branches as
+# deletable while the real run deletes them.
+declare -A checkedOutInWorktree=()
+while read -r branch; do
+  [ -n "$branch" ] || continue
+  [ -n "${wouldRemoveWorktreeBranch[$branch]:-}" ] && continue
+  checkedOutInWorktree[$branch]=1
+done < <(git worktree list --porcelain | awk '/^branch / {sub("refs/heads/", "", $2); print $2}')
 
 isProtected() {
   local branch="$1"
   [[ "$branch" == "$mainBranch" ]] && return 0
-  printf '%s\n' "$worktreeBranches" | grep -Fxq "$branch" && return 0
+  [ -n "${checkedOutInWorktree[$branch]:-}" ] && return 0
   isAtMainTip "$branch"
 }
 
-git for-each-ref refs/heads/ "--format=%(refname:short)" | while read -r branch; do
+# Read through a process substitution, as above, so a dry run can record what it
+# would have deleted and keep it out of the report below.
+declare -A wouldDeleteBranch=()
+while read -r branch; do
   isProtected "$branch" && continue
   reason=$(deletionReason "$branch") || continue
+  if [ -n "$dryRun" ]; then
+    echo "Would delete branch $branch ($reason)"
+    wouldDeleteBranch[$branch]=1
+    continue
+  fi
   echo "Deleting $branch ($reason)"
   git branch -D "$branch" || true
-done
+done < <(git for-each-ref refs/heads/ "--format=%(refname:short)")
 
 # Report remaining branches whose upstream is gone, naming the merged PR (number
 # + merge date) when one is found so a stale-but-merged branch is distinguishable
 # from an unmerged one.
+# A real run has already deleted the branches reported above, so they cannot
+# turn up here; a dry run has to leave them out itself rather than report as
+# kept what it just said it would delete.
 git branch --format '%(refname:short) %(upstream:track)' | while read -r branch track; do
   [[ "$track" == "[gone]" ]] || continue
+  [ -n "${wouldDeleteBranch[$branch]:-}" ] && continue
   pr="${mergedPrByBranch[$branch]:-}"
   if [ -n "$pr" ]; then
     IFS=$'\t' read -r prNumber _ mergedAt <<<"$pr"
