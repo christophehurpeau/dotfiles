@@ -1,0 +1,19 @@
+#compdef wt
+# zsh completion for the `wt` worktree-jump function.
+# Completes the branch of every worktree of the current repo, described by its
+# path. Detached worktrees have no branch to type, so their path is offered
+# instead. Outside a repo `git-worktrees --list` prints nothing and no
+# candidate is offered.
+_wt() {
+  local -a entries
+  local branch wtpath
+  while IFS=$'\t' read -r branch wtpath; do
+    [[ -n "$wtpath" ]] || continue
+    [[ "$branch" == '(detached HEAD)' ]] && branch="$wtpath"
+    # escape colons so branches like `fix:x` aren't split into value/description
+    entries+=("${branch//:/\\:}:${wtpath/#$HOME/\~}")
+  done < <(git-worktrees --list 2>/dev/null)
+  (( ${#entries} )) || return 1
+  _describe -t worktrees 'worktree' entries
+}
+_wt "$@"

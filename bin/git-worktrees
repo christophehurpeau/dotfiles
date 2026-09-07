@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# List git worktrees, or interactively pick one and print its path.
+# A bin cannot cd the parent shell, so the actual `cd` is done by the `wt()`
+# shell function (see bash_aliases); this script only lists/resolves paths.
+#
+#   git-worktrees            pick a worktree, print its path
+#   git-worktrees <filter>   only consider worktrees whose branch or path
+#                            matches (case-insensitive); an exact branch match
+#                            wins over substring matches
+#   git-worktrees --list     print `branch<TAB>path` for every worktree
+#
+# The normal way to reach a worktree is `wt <TAB>` (zsh completion, see
+# completions/_wt), which resolves to an exact branch and needs no selection.
+# With no argument (or an ambiguous filter) a picker is drawn on /dev/tty:
+# type to filter, up/down to move, Enter to select, Esc to cancel.
+#
+# Cancelling the selection prints nothing and exits 0.
+
+NOCOLOR='\033[0m'
+RED='\033[0;31m'
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo -e "${RED}Not inside a git repository.${NOCOLOR}" >&2
+  exit 1
+fi
+
+currentRoot=$(git rev-parse --show-toplevel 2>/dev/null || echo '')
+
+# Bare worktrees have neither `branch` nor `detached`, so they are skipped.
+branches=()
+paths=()
+wtpath=''
+while IFS= read -r line; do
+  case "$line" in
+    'worktree '*) wtpath="${line#worktree }" ;;
+    'branch '*) branches+=("${line#branch refs/heads/}") ; paths+=("$wtpath") ;;
+    detached) branches+=('(detached HEAD)') ; paths+=("$wtpath") ;;
+  esac
+done < <(git worktree list --porcelain)
+
+if [ "${#paths[@]}" -eq 0 ]; then
+  echo -e "${RED}No worktree found.${NOCOLOR}" >&2
+  exit 1
+fi
+
+if [ "${1:-}" = '--list' ]; then
+  for i in "${!paths[@]}"; do
+    printf '%s\t%s\n' "${branches[i]}" "${paths[i]}"
+  done
+  exit 0
+fi
+
+filter="${1:-}"
+if [ -n "$filter" ]; then
+  # An exact branch (what completion inserts) is never ambiguous, even when it
+  # is also a prefix of other branches.
+  for i in "${!paths[@]}"; do
+    if [ "${branches[i]}" = "$filter" ]; then
+      printf '%s\n' "${paths[i]}"
+      exit 0
+    fi
+  done
+
+  filteredBranches=()
+  filteredPaths=()
+  shopt -s nocasematch
+  for i in "${!paths[@]}"; do
+    case "${branches[i]} ${paths[i]}" in
+      *"$filter"*) filteredBranches+=("${branches[i]}") ; filteredPaths+=("${paths[i]}") ;;
+    esac
+  done
+  shopt -u nocasematch
+  if [ "${#filteredPaths[@]}" -eq 0 ]; then
+    echo -e "${RED}No worktree matching '$filter'.${NOCOLOR}" >&2
+    exit 1
+  fi
+  branches=("${filteredBranches[@]}")
+  paths=("${filteredPaths[@]}")
+fi
+
+if [ "${#paths[@]}" -eq 1 ]; then
+  printf '%s\n' "${paths[0]}"
+  exit 0
+fi
+
+# Display rows: `branch` padded to a common width, then the path shortened with
+# ~, and a `*` marker on the worktree we are currently in.
+homeDir="$HOME"
+branchWidth=0
+for i in "${!branches[@]}"; do
+  [ "${#branches[i]}" -gt "$branchWidth" ] && branchWidth="${#branches[i]}"
+done
+rows=()
+for i in "${!paths[@]}"; do
+  shortPath="${paths[i]}"
+  case "$shortPath" in "$homeDir"/*) shortPath="~${shortPath#"$homeDir"}" ;; esac
+  marker=' '
+  [ "${paths[i]}" = "$currentRoot" ] && marker='*'
+  rows+=("$(printf '%s %-*s  %s' "$marker" "$branchWidth" "${branches[i]}" "$shortPath")")
+done
+
+if command -v fzf >/dev/null 2>&1; then
+  # fzf draws on /dev/tty, so stdout stays clean for the caller. The path is
+  # carried in a trailing tab-separated field hidden from the display.
+  entries=()
+  for i in "${!paths[@]}"; do
+    entries+=("${rows[i]}"$'\t'"${paths[i]}")
+  done
+  selected=$(printf '%s\n' "${entries[@]}" \
+    | fzf --prompt='worktree > ' --height=40% --reverse \
+          --delimiter=$'\t' --with-nth=1 \
+          --preview='git -C {2} log -1 --format="%C(yellow)%h%C(reset) %s %C(dim)(%ar)%C(reset)" 2>/dev/null; git -C {2} status --short 2>/dev/null' \
+          --preview-window='down,4,border-top') || selected=''
+  [ -n "$selected" ] || exit 0
+  printf '%s\n' "${selected#*$'\t'}"
+  exit 0
+fi
+
+tty=/dev/tty
+if [ ! -r "$tty" ] || [ ! -w "$tty" ]; then
+  echo -e "${RED}Several worktrees to choose from, but no terminal to prompt on.${NOCOLOR}" >&2
+  exit 1
+fi
+
+# A lone Esc is only known to be lone once no sequence byte follows it. bash 3.2
+# (macOS /bin/bash) rejects a fractional timeout, so it waits a whole second.
+if [ "${BASH_VERSINFO[0]:-0}" -ge 4 ]; then escTimeout=0.05; else escTimeout=1; fi
+
+visibleMax=$(tput lines 2>/dev/null || echo 24)
+visibleMax=$((visibleMax - 3))
+[ "$visibleMax" -gt 12 ] && visibleMax=12
+[ "$visibleMax" -lt 3 ] && visibleMax=3
+
+query=''
+cursor=0
+pick=''
+
+matches=()
+drawnLines=0
+
+filterRows() {
+  matches=()
+  local i
+  if [ -z "$query" ]; then
+    for i in "${!rows[@]}"; do matches+=("$i"); done
+    return
+  fi
+  shopt -s nocasematch
+  for i in "${!rows[@]}"; do
+    # the row carries a ~-shortened path, so the full path is matched too
+    case "${rows[i]} ${paths[i]}" in *"$query"*) matches+=("$i") ;; esac
+  done
+  shopt -u nocasematch
+}
+
+clearDrawn() {
+  [ "$drawnLines" -gt 0 ] && printf '\033[%dA\033[J' "$drawnLines" >"$tty"
+  drawnLines=0
+}
+
+draw() {
+  clearDrawn
+  local total="${#matches[@]}" shown=0 start=0 idx line
+  shown="$total"
+  [ "$shown" -gt "$visibleMax" ] && shown="$visibleMax"
+  [ "$cursor" -ge "$shown" ] && start=$((cursor - shown + 1))
+
+  printf '\033[1mworktree\033[0m > %s\033[7m \033[0m \033[2m(%d/%d)\033[0m\n' \
+    "$query" "$total" "${#rows[@]}" >"$tty"
+  drawnLines=1
+
+  local n=0
+  while [ "$n" -lt "$shown" ]; do
+    idx="${matches[$((start + n))]}"
+    line="${rows[idx]}"
+    if [ "$((start + n))" -eq "$cursor" ]; then
+      printf '\033[7m%s\033[0m\n' "$line" >"$tty"
+    else
+      printf '%s\n' "$line" >"$tty"
+    fi
+    drawnLines=$((drawnLines + 1))
+    n=$((n + 1))
+  done
+  if [ "$total" -eq 0 ]; then
+    printf '\033[2m  no match\033[0m\n' >"$tty"
+    drawnLines=$((drawnLines + 1))
+  elif [ "$total" -gt "$shown" ]; then
+    printf '\033[2m  … %d more\033[0m\n' "$((total - shown))" >"$tty"
+    drawnLines=$((drawnLines + 1))
+  fi
+}
+
+restoreTty() { printf '\033[?25h' >"$tty" 2>/dev/null || true; }
+trap restoreTty EXIT
+printf '\033[?25l' >"$tty"
+
+selected=''
+filterRows
+while :; do
+  draw
+  key=''
+  if ! IFS= read -rsn1 key <"$tty"; then break; fi
+  case "$key" in
+    '') # Enter
+      if [ "${#matches[@]}" -gt 0 ]; then
+        pick="${matches[$cursor]}"
+        selected="${paths[pick]}"
+      fi
+      break ;;
+    $'\033')
+      seq=''
+      # Only an arrow-key sequence follows; anything else (or nothing) is a cancel.
+      IFS= read -rsn2 -t "$escTimeout" seq <"$tty" || seq=''
+      case "$seq" in
+        '[A'|'OA') [ "$cursor" -gt 0 ] && cursor=$((cursor - 1)) ;;
+        '[B'|'OB') [ "$cursor" -lt "$((${#matches[@]} - 1))" ] && cursor=$((cursor + 1)) ;;
+        *) break ;;
+      esac ;;
+    $'\020') [ "$cursor" -gt 0 ] && cursor=$((cursor - 1)) ;;                          # ctrl-p
+    $'\016') [ "$cursor" -lt "$((${#matches[@]} - 1))" ] && cursor=$((cursor + 1)) ;;   # ctrl-n
+    $'\007') break ;;                                                                  # ctrl-g
+    $'\177'|$'\b') query="${query%?}" ; cursor=0 ; filterRows ;;
+    $'\025') query='' ; cursor=0 ; filterRows ;;                                       # ctrl-u
+    [[:print:]]) query="$query$key" ; cursor=0 ; filterRows ;;
+  esac
+done
+
+clearDrawn
+[ -n "$selected" ] || exit 0
+printf '%s\n' "$selected"
