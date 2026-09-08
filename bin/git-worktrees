@@ -7,13 +7,19 @@ set -euo pipefail
 # shell function (see bash_aliases); this script only lists/resolves paths.
 #
 #   git-worktrees            pick a worktree, print its path
-#   git-worktrees <filter>   only consider worktrees whose branch or path
-#                            matches (case-insensitive); an exact branch match
-#                            wins over substring matches
-#   git-worktrees --list     print `branch<TAB>path` for every worktree
+#   git-worktrees <filter>   only consider worktrees whose name, branch or path
+#                            matches (case-insensitive); an exact name or branch
+#                            match wins over substring matches
+#   git-worktrees --list     print `name<TAB>branch<TAB>ahead<TAB>date<TAB>subject`
+#                            for every worktree, where the last three describe
+#                            the commits the worktree has above the main branch
+#                            (the subject is truncated, see subjectWidth)
+#
+# A worktree's name is the last segment of its path; it identifies a worktree
+# without the noise of the directory it was created in.
 #
 # The normal way to reach a worktree is `wt <TAB>` (zsh completion, see
-# completions/_wt), which resolves to an exact branch and needs no selection.
+# completions/_wt), which resolves to an exact name and needs no selection.
 # With no argument (or an ambiguous filter) a picker is drawn on /dev/tty:
 # type to filter, up/down to move, Enter to select, Esc to cancel.
 #
@@ -30,14 +36,24 @@ fi
 currentRoot=$(git rev-parse --show-toplevel 2>/dev/null || echo '')
 
 # Bare worktrees have neither `branch` nor `detached`, so they are skipped.
+names=()
 branches=()
 paths=()
+heads=()
 wtpath=''
+wthead=''
+addWorktree() {
+  names+=("${wtpath##*/}")
+  branches+=("$1")
+  paths+=("$wtpath")
+  heads+=("$wthead")
+}
 while IFS= read -r line; do
   case "$line" in
     'worktree '*) wtpath="${line#worktree }" ;;
-    'branch '*) branches+=("${line#branch refs/heads/}") ; paths+=("$wtpath") ;;
-    detached) branches+=('(detached HEAD)') ; paths+=("$wtpath") ;;
+    'HEAD '*) wthead="${line#HEAD }" ;;
+    'branch '*) addWorktree "${line#branch refs/heads/}" ;;
+    detached) addWorktree '(detached HEAD)' ;;
   esac
 done < <(git worktree list --porcelain)
 
@@ -46,30 +62,95 @@ if [ "${#paths[@]}" -eq 0 ]; then
   exit 1
 fi
 
-if [ "${1:-}" = '--list' ]; then
+# What a worktree is worth knowing about is its own work: how many commits it
+# has above the main branch, and when/what the last of them was. Compared
+# against `origin/<main>` when known -- a local main can lag behind the branch
+# point and count upstream commits as the branch's own. Nothing here touches
+# the network (`git-main-branch` may fetch, so origin/HEAD is read directly).
+mainRef=''
+for candidate in "$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)" \
+  origin/main origin/master main master; do
+  [ -n "$candidate" ] || continue
+  if git rev-parse --verify --quiet "$candidate^{commit}" >/dev/null 2>&1; then
+    mainRef="$candidate"
+    break
+  fi
+done
+
+# Filled by computeAhead, indexed like paths. `ahead` is a count, or `?` when
+# no main branch exists to compare against (a repo with a single branch).
+aheads=()
+aheadDates=()
+aheadSubjects=()
+#
+# A subject reaching the right margin turns any listing of these into a wall of
+# text, so git truncates it (`..`) at a width that leaves the other columns
+# readable. Letting git do it keeps the cut on a character boundary, which the
+# byte-wise substring of bash 3.2 (macOS /bin/bash) would not.
+subjectWidth=52
+computeAhead() {
+  aheads=()
+  aheadDates=()
+  aheadSubjects=()
+  local i ahead adate asubject d s
+  local -a range
   for i in "${!paths[@]}"; do
-    printf '%s\t%s\n' "${branches[i]}" "${paths[i]}"
+    ahead=0
+    adate=''
+    asubject=''
+    if [ -n "$mainRef" ]; then
+      range=("$mainRef..${heads[i]}")
+    else
+      # No main to subtract: describe the tip commit and own up to the count
+      # being unknown rather than showing the whole history as "above main".
+      ahead='?'
+      range=(--max-count=1 "${heads[i]}")
+    fi
+    while IFS=$'\t' read -r d s; do
+      # `%<(n,trunc)` also right-pads a short subject, so drop that padding
+      [ -n "$adate" ] || { adate="$d" ; asubject="${s%"${s##*[![:space:]]}"}" ; }
+      [ "$ahead" = '?' ] || ahead=$((ahead + 1))
+    done < <(git log --format="%ad%x09%<($subjectWidth,trunc)%s" \
+      --date=format:'%m-%d %H:%M' "${range[@]}" 2>/dev/null || true)
+    aheads+=("$ahead")
+    aheadDates+=("$adate")
+    aheadSubjects+=("$asubject")
+  done
+}
+
+if [ "${1:-}" = '--list' ]; then
+  computeAhead
+  for i in "${!paths[@]}"; do
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+      "${names[i]}" "${branches[i]}" "${aheads[i]}" "${aheadDates[i]}" "${aheadSubjects[i]}"
   done
   exit 0
 fi
 
 filter="${1:-}"
 if [ -n "$filter" ]; then
-  # An exact branch (what completion inserts) is never ambiguous, even when it
-  # is also a prefix of other branches.
+  # An exact name (what completion inserts) or branch is never ambiguous, even
+  # when it is also a prefix of other worktrees.
   for i in "${!paths[@]}"; do
-    if [ "${branches[i]}" = "$filter" ]; then
+    if [ "${names[i]}" = "$filter" ] || [ "${branches[i]}" = "$filter" ]; then
       printf '%s\n' "${paths[i]}"
       exit 0
     fi
   done
 
+  filteredNames=()
   filteredBranches=()
   filteredPaths=()
+  filteredHeads=()
   shopt -s nocasematch
   for i in "${!paths[@]}"; do
     case "${branches[i]} ${paths[i]}" in
-      *"$filter"*) filteredBranches+=("${branches[i]}") ; filteredPaths+=("${paths[i]}") ;;
+      *"$filter"*)
+        filteredNames+=("${names[i]}")
+        filteredBranches+=("${branches[i]}")
+        filteredPaths+=("${paths[i]}")
+        filteredHeads+=("${heads[i]}")
+        ;;
     esac
   done
   shopt -u nocasematch
@@ -77,8 +158,10 @@ if [ -n "$filter" ]; then
     echo -e "${RED}No worktree matching '$filter'.${NOCOLOR}" >&2
     exit 1
   fi
+  names=("${filteredNames[@]}")
   branches=("${filteredBranches[@]}")
   paths=("${filteredPaths[@]}")
+  heads=("${filteredHeads[@]}")
 fi
 
 if [ "${#paths[@]}" -eq 1 ]; then
@@ -86,20 +169,76 @@ if [ "${#paths[@]}" -eq 1 ]; then
   exit 0
 fi
 
-# Display rows: `branch` padded to a common width, then the path shortened with
-# ~, and a `*` marker on the worktree we are currently in.
-homeDir="$HOME"
+computeAhead
+
+# Display rows: name, branch, then the commits it has above main -- their
+# count, and the date and subject of the last of them -- with a `*` marker on
+# the worktree we are currently in. The path is not shown (the name is the part
+# that distinguishes worktrees); it stays searchable, and the fzf preview
+# spells it out.
+nameWidth=0
 branchWidth=0
+aheadWidth=0
+aheadLabels=()
 for i in "${!branches[@]}"; do
+  [ "${#names[i]}" -gt "$nameWidth" ] && nameWidth="${#names[i]}"
   [ "${#branches[i]}" -gt "$branchWidth" ] && branchWidth="${#branches[i]}"
+  case "${aheads[i]}" in
+    0) aheadLabels+=('0') ;;
+    '?') aheadLabels+=('?') ;;
+    *) aheadLabels+=("+${aheads[i]}") ;;
+  esac
+  [ "${#aheadLabels[i]}" -gt "$aheadWidth" ] && aheadWidth="${#aheadLabels[i]}"
 done
+
+# A wrapped row would break the cursor-up redraw of the fallback picker below,
+# so the columns are fitted to the terminal rather than let overflow. Cutting
+# the row instead would eat the count and date -- the point of the listing --
+# to keep a name wide enough to push them off the line.
+cols=$(tput cols 2>/dev/null || echo 80)
+[ "$cols" -ge 40 ] 2>/dev/null || cols=80
+
+# `2 ` marker, the 11-column date, and a 2-space gap between all five columns.
+avail=$((cols - 2 - 8 - 11 - aheadWidth))
+[ "$avail" -lt 14 ] && avail=14
+
+# The name identifies the worktree, so it is served first; the branch is
+# redundant with it and gives up its column entirely before the subject
+# has to.
+nameCol="$nameWidth"
+[ "$nameCol" -gt $((avail / 2)) ] && nameCol=$((avail / 2))
+[ "$nameCol" -lt 10 ] && nameCol=10
+rest=$((avail - nameCol))
+branchCol="$branchWidth"
+[ "$branchCol" -gt $((rest / 2)) ] && branchCol=$((rest / 2))
+[ "$branchCol" -lt 8 ] && branchCol=0
+subjectCol=$((rest - branchCol))
+[ "$subjectCol" -lt 12 ] && subjectCol=0
+
+# Cut a field to n columns, marked like git's own `%<(n,trunc)`.
+fit() {
+  if [ "${#1}" -gt "$2" ]; then
+    printf '%s..' "${1:0:$(($2 - 2))}"
+  else
+    printf '%s' "$1"
+  fi
+}
+
 rows=()
 for i in "${!paths[@]}"; do
-  shortPath="${paths[i]}"
-  case "$shortPath" in "$homeDir"/*) shortPath="~${shortPath#"$homeDir"}" ;; esac
   marker=' '
   [ "${paths[i]}" = "$currentRoot" ] && marker='*'
-  rows+=("$(printf '%s %-*s  %s' "$marker" "$branchWidth" "${branches[i]}" "$shortPath")")
+  row=$(printf '%s %-*s' "$marker" "$nameCol" "$(fit "${names[i]}" "$nameCol")")
+  if [ "$branchCol" -gt 0 ]; then
+    row=$(printf '%s  %-*s' "$row" "$branchCol" "$(fit "${branches[i]}" "$branchCol")")
+  fi
+  row=$(printf '%s  %*s  %-11s' "$row" "$aheadWidth" "${aheadLabels[i]}" "${aheadDates[i]}")
+  if [ "$subjectCol" -gt 0 ]; then
+    row=$(printf '%s  %s' "$row" "$(fit "${aheadSubjects[i]}" "$subjectCol")")
+  fi
+  # a worktree with nothing above main has no date/subject: drop their padding
+  row="${row%"${row##*[![:space:]]}"}"
+  rows+=("${row:0:cols}")
 done
 
 if command -v fzf >/dev/null 2>&1; then
@@ -112,8 +251,8 @@ if command -v fzf >/dev/null 2>&1; then
   selected=$(printf '%s\n' "${entries[@]}" \
     | fzf --prompt='worktree > ' --height=40% --reverse \
           --delimiter=$'\t' --with-nth=1 \
-          --preview='git -C {2} log -1 --format="%C(yellow)%h%C(reset) %s %C(dim)(%ar)%C(reset)" 2>/dev/null; git -C {2} status --short 2>/dev/null' \
-          --preview-window='down,4,border-top') || selected=''
+          --preview='printf "%s\n" {2}; git -C {2} log -1 --format="%C(yellow)%h%C(reset) %s %C(dim)(%ar)%C(reset)" 2>/dev/null; git -C {2} status --short 2>/dev/null' \
+          --preview-window='down,5,border-top') || selected=''
   [ -n "$selected" ] || exit 0
   printf '%s\n' "${selected#*$'\t'}"
   exit 0

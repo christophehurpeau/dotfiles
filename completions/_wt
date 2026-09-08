@@ -1,19 +1,91 @@
 #compdef wt
 # zsh completion for the `wt` worktree-jump function.
-# Completes the branch of every worktree of the current repo, described by its
-# path. Detached worktrees have no branch to type, so their path is offered
-# instead. Outside a repo `git-worktrees --list` prints nothing and no
-# candidate is offered.
+# Completes the name of every worktree of the current repo (the last segment of
+# its path -- `git-worktrees` resolves an exact name straight to its path),
+# described by its branch and the commits it has above the main branch: how
+# many, and the date and subject of the last one. Outside a repo
+# `git-worktrees --list` prints nothing and no candidate is offered.
 _wt() {
-  local -a entries
-  local branch wtpath
-  while IFS=$'\t' read -r branch wtpath; do
-    [[ -n "$wtpath" ]] || continue
-    [[ "$branch" == '(detached HEAD)' ]] && branch="$wtpath"
-    # escape colons so branches like `fix:x` aren't split into value/description
-    entries+=("${branch//:/\\:}:${wtpath/#$HOME/\~}")
+  local -a wtNames wtBranches wtAheads wtDates wtSubjects
+  local name branch ahead adate asubject
+  while IFS=$'\t' read -r name branch ahead adate asubject; do
+    [[ -n "$name" ]] || continue
+    wtNames+=("$name")
+    wtBranches+=("$branch")
+    wtAheads+=("$ahead")
+    wtDates+=("$adate")
+    wtSubjects+=("$asubject")
   done < <(git-worktrees --list 2>/dev/null)
-  (( ${#entries} )) || return 1
+  (( ${#wtNames} )) || return 1
+
+  # zsh lists a match as `<value padded to the widest>  -- <description>` and
+  # hard-cuts whatever does not fit the terminal, so a description left to run
+  # long loses its tail with nothing to say it was cut. Everything below is
+  # budgeted to fit instead.
+  local sep
+  zstyle -s ":completion:${curcontext}:worktrees" list-separator sep || sep='--'
+  integer nameWidth=0
+  for name in $wtNames; do
+    (( ${#name} > nameWidth )) && nameWidth=${#name}
+  done
+  # The 7 covers the two spaces before the separator, the one after it, and the
+  # four columns zsh keeps free at the right margin -- measured, not derived:
+  # go over it and zsh does the cutting, which eats the `..` marker put on below.
+  integer budget=$(( ${COLUMNS:-80} - nameWidth - ${#sep} - 7 ))
+
+  local expl
+  if (( budget < 12 )); then
+    # Nothing worth saying fits; the names alone still complete.
+    _wanted worktrees expl 'worktree' compadd -a wtNames
+    return
+  fi
+
+  # Columns are added in decreasing order of usefulness, and each only if it
+  # fits whole -- a half-printed date says less than no date at all -- so a
+  # narrow terminal loses the least. The subject comes last and is the only one
+  # cut rather than dropped: it takes whatever room is left, if any.
+  local -a entries
+  local desc subject
+  integer i room
+  for (( i = 1; i <= ${#wtNames}; i++ )); do
+    desc=''
+    subject="${wtSubjects[i]}"
+    case "${wtAheads[i]}" in
+      # `?`: no main branch to compare against, so no count -- the commit the
+      # other columns describe is still the branch tip.
+      '?') ;;
+      0) desc='no commit above main' ; subject='' ;;
+      *) desc="+${wtAheads[i]}" ;;
+    esac
+    # only the sentence above can overflow this early; it shortens to a bare 0
+    (( ${#desc} > budget )) && desc='0'
+
+    if [[ -n "${wtDates[i]}" ]] && (( ${#desc} + ${#wtDates[i]} + 2 <= budget )); then
+      desc="${desc:+$desc  }${wtDates[i]}"
+    fi
+
+    # A worktree usually lives in a directory named after its branch, so the
+    # branch is the most redundant column -- it goes before the subject does,
+    # and never takes the room a subject would use. It reads next to the name,
+    # so it is prepended rather than appended.
+    if [[ "${wtBranches[i]}" != "${wtNames[i]}" ]] \
+      && (( ${#wtBranches[i]} + ${#desc} + 12 <= budget )); then
+      desc="${wtBranches[i]}${desc:+  $desc}"
+    fi
+
+    # `git-worktrees` already caps the subject at a width that keeps a listing
+    # readable; this only has to fit what is left of the line.
+    room=$(( budget - ${#desc} - 2 ))
+    if [[ -n "$subject" ]] && (( room >= 8 )); then
+      # `..` like git's own `%<(n,trunc)` marker, and unlike `…` its width does
+      # not depend on the locale
+      (( ${#subject} > room )) && subject="${subject[1,room-2]}.."
+      desc="${desc:+$desc  }$subject"
+    fi
+
+    # escape colons so names like `fix:x` aren't split into value/description
+    entries+=("${wtNames[i]//:/\\:}:$desc")
+  done
   _describe -t worktrees 'worktree' entries
 }
 _wt "$@"

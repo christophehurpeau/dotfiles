@@ -23,9 +23,10 @@ c() {
 
 # Jump to a git worktree. Resolution lives in bin/git-worktrees (`git wt` lists
 # them); this shim only performs the cd. Empty output means selection cancelled.
-# Autocomplete: completions/_wt -- `wt <TAB>` offers every worktree branch and
-# jumps straight there. Without an argument, git-worktrees draws a picker
-# (type to filter, up/down, Enter).
+# Autocomplete: completions/_wt -- `wt <TAB>` offers every worktree by name,
+# described by its branch and the commits it has above main, and jumps straight
+# there. Without an argument, git-worktrees draws a picker (type to filter,
+# up/down, Enter).
 wt() {
   local target
   target="$(git-worktrees "$@")" || return $?
