@@ -8,7 +8,16 @@
 # A branch that carries commits beyond what was merged is always kept: possible
 # work-in-progress is never destroyed.
 #
-# Usage: git-clean-merged-branches [-n|--dry-run]
+# Nothing is printed as the work happens. Every branch is classified first, the
+# classification drives the deletions, and one grouped report is written at the
+# end, so a branch appears exactly once, under one of:
+#   - cleaned: deleted, and why;
+#   - not cleaned, needs attention: merged, but something (a dirty worktree,
+#     commits beyond the merged PR head) stands in the way;
+#   - in progress: live work, kept on purpose.
+# The report goes to stdout, progress and diagnostics to stderr.
+#
+# Usage: git-clean-merged-branches [-n|--dry-run] [--git-only]
 
 set -euo pipefail
 
@@ -28,20 +37,27 @@ filterMerged="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/git-clean-merged-bra
 
 usage() {
   cat <<'USAGE'
-Usage: git-clean-merged-branches [-n|--dry-run]
+Usage: git-clean-merged-branches [-n|--dry-run] [--git-only]
 
-Delete local branches, and their worktrees, that are merged into the main branch.
+Delete local branches, and their worktrees, that are merged into the main branch,
+then report what was cleaned, what is still in progress, and what could not be
+cleaned.
 
   -n, --dry-run   Report what would be removed and change nothing. Still
                   fetches: the answer depends on an up-to-date main, so a
                   dry run that skipped the fetch could not be trusted.
+      --git-only  Skip the GitHub query and use the git-only heuristics. Use it
+                  on a non-GitHub remote, or offline, where the query would fail
+                  and stop the run.
 USAGE
 }
 
 dryRun=""
+gitOnly=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -n | --dry-run) dryRun=1 ;;
+    --git-only) gitOnly=1 ;;
     -h | --help)
       usage
       exit 0
@@ -54,6 +70,75 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+# Colors, per stream: the report is written to stdout, progress and errors to
+# stderr, and either can be redirected on its own. Empty when the stream is not
+# a terminal, so a piped report stays plain text.
+outBold='' outGreen='' outYellow='' outBlue='' outCyan='' outDim='' outReset=''
+if [ -t 1 ]; then
+  outBold='\033[1m'
+  outGreen='\033[1;32m'
+  outYellow='\033[1;33m'
+  outBlue='\033[1;34m'
+  outCyan='\033[0;36m'
+  outDim='\033[2m'
+  outReset='\033[0m'
+fi
+errDim='' errRed='' errReset='' errClear=''
+if [ -t 2 ]; then
+  errDim='\033[2m'
+  errRed='\033[0;31m'
+  errReset='\033[0m'
+  errClear='\033[K'
+fi
+
+# On a terminal each step overwrites the previous one and the last is erased
+# before the report; elsewhere (a log, a pipe) they are kept as plain lines,
+# where the carriage return would be noise.
+progress() {
+  if [ -t 2 ]; then
+    printf '%b\r' "${errDim}$1...${errReset}${errClear}" >&2
+  else
+    printf '%s...\n' "$1" >&2
+  fi
+}
+
+progressDone() {
+  [ -t 2 ] && printf '%b' "$errClear" >&2
+  return 0
+}
+
+fail() {
+  progressDone
+  printf '%b\n' "${errRed}$1${errReset}" >&2
+  exit 1
+}
+
+# Wording helpers, used to build the report's sentences.
+#
+# `${array[*]}` joins on the first character of IFS only, which turns a list into
+# "a,b,c"; the report wants "a, b, c".
+joinWith() {
+  local separator="$1" out="" part
+  shift
+  for part in ${1+"$@"}; do out="${out:+$out$separator}$part"; done
+  printf '%s' "$out"
+}
+
+# "1 commit" / "3 commits", rather than the "commit(s)" that makes every count
+# read like a form letter. $3 carries the plural form when appending an s to $2
+# does not produce it ("branch" -> "branches").
+plural() {
+  local count="$1" singular="$2" many="${3:-$2s}"
+  if [ "$count" -eq 1 ]; then printf '%s %s' "$count" "$singular"; else printf '%s %s' "$count" "$many"; fi
+}
+
+# Worktree paths are long and mostly $HOME. The report is read, not parsed, so
+# abbreviate; the hints print the same abbreviation, which the shell expands back
+# when the line is copied.
+shortPath() {
+  printf '%s' "${1/#$HOME/\~}"
+}
 
 # The GitHub CLI lets us recognize branches merged via a squashed PR even once
 # main has moved on. Optional: without it, only the git-only heuristics run.
@@ -76,6 +161,7 @@ prQueryErr=""
 trap 'rm -f ${prQueryOut:+"$prQueryOut"} ${prQueryErr:+"$prQueryErr"}' EXIT
 
 startMergedPrsQuery() {
+  [ -z "$gitOnly" ] || return 0
   command -v gh >/dev/null 2>&1 || return 0
   prQueryOut=$(mktemp)
   prQueryErr=$(mktemp)
@@ -86,16 +172,17 @@ startMergedPrsQuery() {
   prQueryPid=$!
 }
 
+# A failed query is fatal: it silently turns branches merged through a squashed
+# PR into "in progress" ones, which is exactly the misreport this output is meant
+# to rule out. `--git-only` is the supported way to run without it (a non-GitHub
+# remote, or offline), and asks for the reduced answer explicitly.
 loadMergedPrs() {
   [ -n "$prQueryPid" ] || return 0
   local status=0
   wait "$prQueryPid" || status=$?
   if [ -s "$prQueryErr" ]; then cat "$prQueryErr" >&2; fi
-  # On failure (not a GitHub repo, unauthenticated, offline) warn and fall back
-  # to git-only.
   if [ "$status" -ne 0 ]; then
-    echo "Warning: gh pr list failed (see above); using git-only heuristics." >&2
-    return 0
+    fail "gh pr list failed (see above). Fix it, or pass --git-only to run on the git-only heuristics."
   fi
   local branch prNumber prHeadOid mergedAt
   while IFS=$'\t' read -r branch prNumber prHeadOid mergedAt; do
@@ -109,7 +196,8 @@ loadMergedPrs() {
 startMergedPrsQuery
 
 # fetch origin and prune
-git fetch -p
+progress "Fetching origin"
+git fetch -p || fail "git fetch -p failed; nothing was changed."
 
 # autodetect main branch (usually master or main)
 mainBranch=$(git-main-branch)
@@ -118,12 +206,13 @@ mainCommit=$(git rev-parse "$mainBranch")
 # A refname holds no space and no newline, so one line per branch reads back
 # safely; it may hold a quote, hence the NUL separator for xargs below.
 branchList=$(git for-each-ref refs/heads/ "--format=%(objectname) %(refname:short)")
+branchCount=$(printf '%s\n' "$branchList" | grep -c . || true)
 
 # xargs needs a number and getconf is not guaranteed to answer.
 parallelism=$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)
 case "$parallelism" in "" | *[!0-9]*) parallelism=4 ;; esac
 
-# Answering "is this branch merged?" costs tens of milliseconds, and both loops
+# Answering "is this branch merged?" costs tens of milliseconds, and both passes
 # below ask it of the branches checked out in a worktree. Ask once for every
 # branch, spread over the cores: the branches are independent. The check itself
 # lives in the _filter-merged helper next to this script, so xargs has something
@@ -133,17 +222,14 @@ case "$parallelism" in "" | *[!0-9]*) parallelism=4 ;; esac
 # worktree rather than a merge leftover, so it is filtered out up front (and
 # with it main itself) and never reported as merged.
 # The helper always exits 0, even on a ref it cannot read, so a non-zero status
-# here means the check itself could not run. Say so: discarding it would leave an
-# empty set, and the script would cheerfully report a repository with nothing to
-# clean. Branches stay in place either way, which is the safe direction.
+# here means the check itself could not run. That is fatal: with an empty result
+# the script would cheerfully report a repository with nothing to clean.
+progress "Checking $branchCount branches"
 mergedList=$(
   printf '%s\n' "$branchList" \
     | awk -v mainCommit="$mainCommit" 'NF && $1 != mainCommit { printf "%s%c", $2, 0 }' \
     | xargs -0 -P "$parallelism" -n 1 "$filterMerged" "$mainBranch"
-) || {
-  echo "Warning: the merged-branch check failed (see above); no branch reported as merged." >&2
-  mergedList=""
-}
+) || fail "The merged-branch check failed (see above); nothing was changed."
 
 declare -A mergedIntoMain=()
 while read -r branch; do
@@ -171,8 +257,13 @@ loadMergedPrs
 
 # The PR heads live under refs/pull/, which the fetch above does not bring in,
 # and the comparison below needs them. Fetching them one at a time inside the
-# loops costs a round trip per branch; ask for the ones we may need in one go.
-# Best effort: deletionReason still fetches on its own whatever is missing.
+# passes costs a round trip per branch; ask for the ones we may need in one go.
+#
+# Best effort, and deliberately so: one refspec that origin does not have aborts
+# the whole fetch, after which deletionReason re-fetches every head one at a
+# time, one round trip worse than not batching at all. That needs a merged PR
+# whose refs/pull/N/head is gone from the remote, which GitHub does not do, so
+# the common case pays one call instead of N and the rare one pays N+1.
 prefetchMergedPrHeads() {
   local refspecs=() branch prNumber prHeadOid
   while read -r _ branch; do
@@ -188,19 +279,47 @@ prefetchMergedPrHeads() {
 }
 prefetchMergedPrHeads
 
-# Echoes a deletion reason and returns 0 when the branch is safe to delete;
-# returns 1 to keep it. When a merged PR exists but the local tip has commits
-# beyond the PR head, the branch is KEPT (protecting possible work-in-progress)
-# and a warning is emitted.
-deletionReason() {
+# Per-branch verdict, filled by the classification pass and read by everything
+# after it:
+#   branchStatus  cleaned | blocked | inProgress
+#   detail        the sentence the report prints after the branch name
+#   hint          a command to run, on blocked entries, to resolve the situation
+#   worktreePath  the worktree holding the branch, when there is one
+declare -A branchStatus=()
+declare -A detail=()
+declare -A hint=()
+declare -A worktreePath=()
+
+# Answer of the last computeDeletionVerdict call. Globals rather than a
+# command substitution: the answer can cost a fetch, and a subshell would throw
+# away both the value and any state worth keeping.
+verdictReason=""
+verdictDeletable=no
+verdictHasMergedPr=no
+verdictHint=""
+
+# Sets the verdict globals for a branch: whether it may be deleted, the sentence
+# saying why (or why not), whether a merged PR is on record for it, and the
+# command that shows what is in the way when there is one.
+# A branch carrying commits beyond the merged PR head is never deletable:
+# possible work in progress is not destroyed, it is reported.
+computeDeletionVerdict() {
   local branch="$1"
+  verdictReason=""
+  verdictDeletable=no
+  verdictHasMergedPr=no
+  verdictHint=""
+
   if isMergedIntoMain "$branch"; then
-    echo "merged into $mainBranch"
+    verdictReason="merged into $mainBranch"
+    verdictDeletable=yes
     return 0
   fi
 
   local pr="${mergedPrByBranch[$branch]:-}"
-  [ -n "$pr" ] || return 1
+  [ -n "$pr" ] || return 0
+  verdictHasMergedPr=yes
+
   local prNumber prHeadOid mergedAt
   IFS=$'\t' read -r prNumber prHeadOid mergedAt <<<"$pr"
 
@@ -210,101 +329,274 @@ deletionReason() {
     git fetch --quiet origin "refs/pull/${prNumber}/head" 2>/dev/null || true
   fi
   if ! git cat-file -e "${prHeadOid}^{commit}" 2>/dev/null; then
-    echo "Keeping $branch: PR #$prNumber is merged but its head could not be fetched to verify there are no extra local commits." >&2
-    return 1
-  fi
-
-  if git merge-base --is-ancestor "$branch" "$prHeadOid"; then
-    echo "PR #$prNumber merged $mergedAt"
+    verdictReason="PR #$prNumber merged ${mergedAt%%T*}, but its head could not be fetched to verify there are no extra local commits"
+    verdictHint="gh pr view $prNumber"
     return 0
   fi
 
-  echo "Keeping $branch: PR #$prNumber merged $mergedAt, but local tip has $(git rev-list --count "${prHeadOid}..${branch}") commit(s) beyond the merged PR head (possible work in progress)." >&2
-  return 1
+  if git merge-base --is-ancestor "$branch" "$prHeadOid"; then
+    verdictReason="PR #$prNumber merged ${mergedAt%%T*}"
+    verdictDeletable=yes
+    return 0
+  fi
+
+  local beyond
+  beyond=$(git rev-list --count "${prHeadOid}..${branch}")
+  verdictReason="PR #$prNumber merged ${mergedAt%%T*}, but the local tip has $(plural "$beyond" commit) beyond the merged PR head"
+  verdictHint="git log --oneline ${prHeadOid:0:9}..$branch"
+  return 0
 }
 
 # A real run lets `git worktree remove` refuse a worktree it must not destroy.
 # A dry run has to predict that refusal to stay faithful, so reproduce it: the
 # command declines a worktree that is locked, or that holds uncommitted or
 # untracked files.
-isRemovableWorktree() {
-  local path="$1" adminDir
-  adminDir=$(git -C "$path" rev-parse --path-format=absolute --git-dir 2>/dev/null) || return 1
-  if [ -e "$adminDir/locked" ]; then return 1; fi
-  [ -z "$(git -C "$path" status --porcelain)" ]
+#
+# Echoes what is in the way, completing "its worktree <path> ..." ("holds 3
+# modified files and 1 untracked file"), so the report can name it instead of
+# saying "has uncommitted changes" about a worktree whose only content is an
+# untracked scratch file. Returns 0 when removable.
+worktreeBlocker() {
+  local path="$1" adminDir statusOut modified untracked
+  adminDir=$(git -C "$path" rev-parse --path-format=absolute --git-dir 2>/dev/null) || {
+    echo "could not be read"
+    return 1
+  }
+  if [ -e "$adminDir/locked" ]; then
+    echo "is locked"
+    return 1
+  fi
+  statusOut=$(git -C "$path" status --porcelain)
+  [ -n "$statusOut" ] || return 0
+  untracked=$(printf '%s\n' "$statusOut" | grep -c '^??' || true)
+  modified=$(($(printf '%s\n' "$statusOut" | grep -c . || true) - untracked))
+  local parts=()
+  [ "$modified" -gt 0 ] && parts+=("$(plural "$modified" 'modified file')")
+  [ "$untracked" -gt 0 ] && parts+=("$(plural "$untracked" 'untracked file')")
+  echo "holds $(joinWith ' and ' "${parts[@]}")"
+  return 1
 }
 
-# Remove worktrees whose branch is merged into main. No --force: a worktree
-# with uncommitted changes is kept (along with its branch) instead of destroyed.
-#
-# Read through a process substitution rather than a pipe so the loop runs in
-# this shell and a dry run can record what it would have removed.
-declare -A wouldRemoveWorktreeBranch=()
+# Which branch, if any, each worktree has checked out.
+declare -A branchWorktree=()
 while IFS=$'\t' read -r path branch; do
-  [[ "$branch" == "$mainBranch" ]] && continue
-  isAtMainTip "$branch" && continue
-  deletionReason "$branch" >/dev/null || continue
-  if [ -n "$dryRun" ]; then
-    if isRemovableWorktree "$path"; then
-      echo "Would remove worktree at $path (branch $branch)"
-      wouldRemoveWorktreeBranch[$branch]=1
-    else
-      echo "Worktree at $path has uncommitted changes; leaving branch $branch in place." >&2
-    fi
-    continue
-  fi
-  if ! git worktree remove "$path" 2>/dev/null; then
-    echo "Worktree at $path has uncommitted changes; leaving branch $branch in place." >&2
-  fi
+  [ -n "$branch" ] || continue
+  branchWorktree[$branch]="$path"
 done < <(git worktree list --porcelain | awk '/^worktree / {p=substr($0,10)} /^branch / {sub("refs/heads/","",$2); print p"\t"$2}')
 
-# Branches checked out in a remaining worktree cannot be deleted. A real run has
-# just removed the worktrees above, so they are gone from this listing; a dry run
-# has to discount them itself, or it would report none of their branches as
-# deletable while the real run deletes them.
-declare -A checkedOutInWorktree=()
-while read -r branch; do
-  [ -n "$branch" ] || continue
-  [ -n "${wouldRemoveWorktreeBranch[$branch]:-}" ] && continue
-  checkedOutInWorktree[$branch]=1
-done < <(git worktree list --porcelain | awk '/^branch / {sub("refs/heads/", "", $2); print $2}')
+# Two worktrees must not be removed even when their branch is merged: the main
+# working tree, which git refuses to remove, and the one this run is standing in,
+# which git would happily delete from under the caller's shell. Both are reported
+# as needing attention, with the one thing to do about them.
+mainWorktree=$(git worktree list --porcelain | awk '/^worktree /{print substr($0,10); exit}')
+currentWorktree=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
 
-isProtected() {
-  local branch="$1"
-  [[ "$branch" == "$mainBranch" ]] && return 0
-  [ -n "${checkedOutInWorktree[$branch]:-}" ] && return 0
-  isAtMainTip "$branch"
+# Classification. Nothing is removed here: the verdict is recorded for every
+# branch first, so the report can be written from one consistent view, and so a
+# dry run and a real run walk the same decisions.
+declare -A upstreamTrack=()
+declare -A hasUpstream=()
+while IFS=$'\t' read -r branch upstream track; do
+  [ -n "$branch" ] || continue
+  [ -n "$upstream" ] && hasUpstream[$branch]=1
+  upstreamTrack[$branch]="$track"
+done < <(git for-each-ref refs/heads/ "--format=%(refname:short)%09%(upstream)%09%(upstream:track)")
+
+classify() {
+  local branch="$1" wtPath="${branchWorktree[$branch]:-}" blocker
+
+  if [[ "$branch" == "$mainBranch" ]]; then
+    return 0 # the main branch is not part of the report
+  fi
+
+  [ -n "$wtPath" ] && worktreePath[$branch]="$wtPath"
+
+  # A branch at main's commit is a fresh branch or worktree, not a leftover.
+  if isAtMainTip "$branch"; then
+    branchStatus[$branch]=inProgress
+    detail[$branch]="no commits yet, at $mainBranch's tip"
+    return 0
+  fi
+
+  computeDeletionVerdict "$branch"
+
+  if [ "$verdictDeletable" != yes ]; then
+    # A merged PR whose commits are not all accounted for locally is the case
+    # this report exists for: it should have been cleaned, and was not.
+    if [ "$verdictHasMergedPr" = yes ]; then
+      branchStatus[$branch]=blocked
+      detail[$branch]="$verdictReason"
+      hint[$branch]="$verdictHint"
+    else
+      branchStatus[$branch]=inProgress
+    fi
+    return 0
+  fi
+
+  # Merged. What can still stand in the way is its worktree, and (in a real run)
+  # the deletion itself.
+  if [ -n "$wtPath" ]; then
+    if [ "$wtPath" = "$mainWorktree" ]; then
+      branchStatus[$branch]=blocked
+      detail[$branch]="$verdictReason, but it is checked out in the main working tree"
+      hint[$branch]="git switch $mainBranch"
+      return 0
+    fi
+    if [ "$wtPath" = "$currentWorktree" ]; then
+      branchStatus[$branch]=blocked
+      detail[$branch]="$verdictReason, but this run is inside its worktree $(shortPath "$wtPath")"
+      hint[$branch]="cd elsewhere, then re-run"
+      return 0
+    fi
+    if ! blocker=$(worktreeBlocker "$wtPath"); then
+      branchStatus[$branch]=blocked
+      detail[$branch]="$verdictReason, but its worktree $(shortPath "$wtPath") $blocker"
+      hint[$branch]="git -C $(shortPath "$wtPath") status"
+      return 0
+    fi
+  fi
+
+  branchStatus[$branch]=cleaned
+  detail[$branch]="$verdictReason"
+  return 0
 }
 
-# Read through a process substitution, as above, so a dry run can record what it
-# would have deleted and keep it out of the report below.
-declare -A wouldDeleteBranch=()
-while read -r branch; do
-  isProtected "$branch" && continue
-  reason=$(deletionReason "$branch") || continue
+while read -r _ branch; do
+  [ -n "$branch" ] || continue
+  classify "$branch"
+done <<<"$branchList"
+
+# Act. The worktree goes first: its branch cannot be deleted while it is checked
+# out. A removal that fails where worktreeBlocker predicted success (a race, a
+# permission problem) demotes the branch to blocked with what git said, so the
+# report never claims a deletion that did not happen.
+if [ -z "$dryRun" ]; then progress "Cleaning"; fi
+while read -r _ branch; do
+  [ -n "$branch" ] || continue
+  [ "${branchStatus[$branch]:-}" = cleaned ] || continue
+  wtPath="${worktreePath[$branch]:-}"
+
   if [ -n "$dryRun" ]; then
-    echo "Would delete branch $branch ($reason)"
-    wouldDeleteBranch[$branch]=1
+    [ -n "$wtPath" ] && detail[$branch]="${detail[$branch]}, worktree $(shortPath "$wtPath") would be removed"
     continue
   fi
-  echo "Deleting $branch ($reason)"
-  git branch -D "$branch" || true
-done < <(git for-each-ref refs/heads/ "--format=%(refname:short)")
 
-# Report remaining branches whose upstream is gone, naming the merged PR (number
-# + merge date) when one is found so a stale-but-merged branch is distinguishable
-# from an unmerged one.
-# A real run has already deleted the branches reported above, so they cannot
-# turn up here; a dry run has to leave them out itself rather than report as
-# kept what it just said it would delete.
-git branch --format '%(refname:short) %(upstream:track)' | while read -r branch track; do
-  [[ "$track" == "[gone]" ]] || continue
-  [ -n "${wouldDeleteBranch[$branch]:-}" ] && continue
-  pr="${mergedPrByBranch[$branch]:-}"
-  if [ -n "$pr" ]; then
-    IFS=$'\t' read -r prNumber _ mergedAt <<<"$pr"
-    echo "Gone branch $branch: merged as PR #$prNumber on $mergedAt (kept: has local commits beyond the merged PR head)."
-  else
-    echo "Gone branch $branch: upstream deleted, no merged PR found."
+  if [ -n "$wtPath" ]; then
+    if wtError=$(git worktree remove "$wtPath" 2>&1); then
+      detail[$branch]="${detail[$branch]}, worktree $(shortPath "$wtPath") removed"
+    else
+      branchStatus[$branch]=blocked
+      detail[$branch]="${detail[$branch]}, but its worktree could not be removed: ${wtError//$'\n'/ }"
+      hint[$branch]="git -C $(shortPath "$wtPath") status"
+      continue
+    fi
   fi
-done
+  if ! branchError=$(git branch -D "$branch" 2>&1); then
+    branchStatus[$branch]=blocked
+    detail[$branch]="${detail[$branch]}, but the branch could not be deleted: ${branchError//$'\n'/ }"
+  fi
+done <<<"$branchList"
+
+progressDone
+
+# Report. Branches are printed in for-each-ref order (alphabetical, stable), so
+# two runs of the same repository read the same way.
+#
+# An in-progress branch is only worth a line when there is something to say about
+# it: it was pushed (upstream present or gone), it is checked out in a worktree,
+# or a merged PR is on record for it. Purely local scratch branches are counted
+# instead, so the section stays about work that is actually in flight.
+isNotable() {
+  local branch="$1"
+  [ -n "${hasUpstream[$branch]:-}" ] && return 0
+  [ -n "${worktreePath[$branch]:-}" ] && return 0
+  [ -n "${mergedPrByBranch[$branch]:-}" ] && return 0
+  return 1
+}
+
+# Everything the in-progress section knows, as one sentence: how far ahead of
+# main, where it is checked out, and what became of its upstream.
+inProgressDetail() {
+  local branch="$1" parts=() ahead
+  ahead=$(git rev-list --count "$mainBranch..$branch" 2>/dev/null || echo 0)
+  if [ "$ahead" -gt 0 ]; then
+    parts+=("$(plural "$ahead" commit) ahead of $mainBranch")
+  fi
+  [ -n "${detail[$branch]:-}" ] && parts+=("${detail[$branch]}")
+  if [ -n "${worktreePath[$branch]:-}" ]; then
+    parts+=("checked out in $(shortPath "${worktreePath[$branch]}")")
+  fi
+  case "${upstreamTrack[$branch]:-}" in
+    '[gone]') parts+=("upstream gone") ;;
+    '') [ -n "${hasUpstream[$branch]:-}" ] && parts+=("upstream present") ;;
+    *) parts+=("upstream ${upstreamTrack[$branch]//[\[\]]/}") ;;
+  esac
+  # Said only when the PR query actually ran: on --git-only, or without gh, "no
+  # merged PR found" would be a statement about a question that was never asked.
+  if [ -n "$prQueryPid" ] && [ -z "${mergedPrByBranch[$branch]:-}" ]; then
+    parts+=("no merged PR found")
+  fi
+  joinWith ', ' "${parts[@]+"${parts[@]}"}"
+  echo
+}
+
+# The longest name in a section, so the details line up in a column. Names are
+# short in practice; a very long one just pushes its own detail to the right.
+columnWidth() {
+  local branch width=0
+  for branch in "$@"; do
+    [ "${#branch}" -gt "$width" ] && width=${#branch}
+  done
+  echo "$width"
+}
+
+printSection() {
+  local color="$1" heading="$2"
+  shift 2
+  local branches=("$@") width branch
+  [ ${#branches[@]} -gt 0 ] || return 0
+  width=$(columnWidth "${branches[@]}")
+  printf '%b\n' "${color}${heading} (${#branches[@]})${outReset}"
+  for branch in "${branches[@]}"; do
+    # The padding sits outside the color, so a copied line carries no escape.
+    printf '  %b%s%b%*s  %s\n' "$outCyan" "$branch" "$outReset" "$((width - ${#branch}))" "" "${detail[$branch]}"
+    if [ -n "${hint[$branch]:-}" ]; then
+      printf '  %*s  %b\n' "$width" "" "${outDim}${hint[$branch]}${outReset}"
+    fi
+  done
+  printf '\n'
+}
+
+cleaned=()
+blocked=()
+inProgress=()
+otherCount=0
+while read -r _ branch; do
+  [ -n "$branch" ] || continue
+  case "${branchStatus[$branch]:-}" in
+    cleaned) cleaned+=("$branch") ;;
+    blocked) blocked+=("$branch") ;;
+    inProgress)
+      if isNotable "$branch"; then
+        detail[$branch]=$(inProgressDetail "$branch")
+        inProgress+=("$branch")
+      else
+        otherCount=$((otherCount + 1))
+      fi
+      ;;
+  esac
+done <<<"$branchList"
+
+if [ ${#cleaned[@]} -eq 0 ] && [ ${#blocked[@]} -eq 0 ] && [ ${#inProgress[@]} -eq 0 ]; then
+  printf '%b\n' "${outBold}Nothing to clean.${outReset}"
+  [ "$otherCount" -gt 0 ] && printf '%b\n' "${outDim}($(plural "$otherCount" 'other local branch' 'other local branches') with no upstream, untouched)${outReset}"
+  exit 0
+fi
+
+printSection "$outGreen" "${dryRun:+would be }cleaned" "${cleaned[@]+"${cleaned[@]}"}"
+printSection "$outYellow" "not cleaned - needs attention" "${blocked[@]+"${blocked[@]}"}"
+printSection "$outBlue" "in progress" "${inProgress[@]+"${inProgress[@]}"}"
+
+[ "$otherCount" -gt 0 ] && printf '%b\n' "${outDim}($(plural "$otherCount" 'other local branch' 'other local branches') with no upstream, untouched)${outReset}"
+
+exit 0
