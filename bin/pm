@@ -6,7 +6,11 @@
 # matching command. Unknown subcommands pass through to the detected PM.
 #
 # Aliases: i/install, a/add, rm/remove, r/run, x/exec, b/build, t/test,
-#          d/dev, s/start, u/upgrade.
+#          d/dev, s/start, u/update, ui/update-interactive.
+#
+# Update scope: every PM defaults to the package.json in $PWD only, except
+# yarn berry whose `up` is always project-wide. Pass -r to `pm u` / `pm ui`
+# to update every workspace package instead.
 #
 # Dependency: jq (for reading the packageManager field).
 
@@ -45,6 +49,20 @@ _pm_yarn_major() {
   printf '%s\n' "${v%%.*}"
 }
 
+# Pull the workspace-wide flag out of the arguments: sets _pm_recursive to
+# 0|1 and leaves the remaining arguments in the _pm_args array.
+_pm_take_recursive() {
+  _pm_recursive=0
+  _pm_args=()
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      -r|--recursive|-w|--workspaces) _pm_recursive=1 ;;
+      *) _pm_args+=("$arg") ;;
+    esac
+  done
+}
+
 _pm_usage() {
   cat <<'EOF'
 pm - unified package manager wrapper (npm / yarn / pnpm / bun)
@@ -64,6 +82,14 @@ Commands:
   u, update          update dependencies
   ui                 update dependencies interactively (errors if unsupported)
   -h, --help         show this help and the detected PM help
+
+Options (u / ui):
+  -r, --recursive    update every workspace package, not just the one in $PWD
+                     (alias: -w, --workspaces)
+
+Update scope without -r is the package.json in $PWD, except yarn berry:
+`yarn up` / `yarn upgrade-interactive` always span the whole project.
+yarn 1 has no recursive update at all and errors on -r.
 
 Any other command is passed through to the detected package manager.
 EOF
@@ -148,20 +174,51 @@ main() {
         bun)  exec bun run "$script" "$@" ;;
       esac ;;
     u|update|upgrade)
+      _pm_take_recursive "$@"
+      set -- ${_pm_args[@]+"${_pm_args[@]}"}
       case "$pm" in
-        npm)  exec npm update "$@" ;;
+        npm)
+          if [ "$_pm_recursive" = 1 ]; then
+            exec npm update --workspaces --include-workspace-root "$@"
+          fi
+          exec npm update "$@" ;;
         yarn)
-          if [ "$(_pm_yarn_major)" = "1" ]; then exec yarn upgrade "$@"; else exec yarn up "$@"; fi ;;
-        pnpm) exec pnpm update "$@" ;;
-        bun)  exec bun update "$@" ;;
+          if [ "$(_pm_yarn_major)" = "1" ]; then
+            if [ "$_pm_recursive" = 1 ]; then
+              echo "pm: yarn 1 cannot update every workspace at once (upgrade to yarn berry)" >&2
+              return 1
+            fi
+            exec yarn upgrade "$@"
+          fi
+          # Berry's `up` is always project-wide and needs an explicit pattern.
+          if [ $# -eq 0 ]; then exec yarn up '*'; fi
+          exec yarn up "$@" ;;
+        pnpm)
+          if [ "$_pm_recursive" = 1 ]; then exec pnpm update -r "$@"; fi
+          exec pnpm update "$@" ;;
+        bun)
+          if [ "$_pm_recursive" = 1 ]; then exec bun update --filter '*' "$@"; fi
+          exec bun update "$@" ;;
       esac ;;
     ui|update-interactive|upgrade-interactive)
+      _pm_take_recursive "$@"
+      set -- ${_pm_args[@]+"${_pm_args[@]}"}
       case "$pm" in
         npm)
           echo "pm: npm has no interactive upgrade (use 'pm u', or 'pm x npm-check-updates')" >&2
           return 1 ;;
-        yarn) exec yarn upgrade-interactive "$@" ;;
-        pnpm) exec pnpm update --latest --interactive "$@" ;;
+        yarn)
+          if [ "$(_pm_yarn_major)" = "1" ] && [ "$_pm_recursive" = 1 ]; then
+            echo "pm: yarn 1 cannot update every workspace at once (upgrade to yarn berry)" >&2
+            return 1
+          fi
+          # Berry's upgrade-interactive already spans every workspace.
+          exec yarn upgrade-interactive "$@" ;;
+        pnpm)
+          if [ "$_pm_recursive" = 1 ]; then
+            exec pnpm update --latest --interactive -r "$@"
+          fi
+          exec pnpm update --latest --interactive "$@" ;;
         bun)
           echo "pm: bun has no interactive upgrade (use 'pm u')" >&2
           return 1 ;;
