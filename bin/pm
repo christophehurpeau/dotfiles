@@ -79,13 +79,17 @@ Commands:
   t, test            run the test script
   d, dev             run the dev script
   s, start           run the start script
-  u, update          update dependencies
+  u, update          update dependencies to latest, ignoring semver ranges
   ui                 update dependencies interactively (errors if unsupported)
   -h, --help         show this help and the detected PM help
 
 Options (u / ui):
   -r, --recursive    update every workspace package, not just the one in $PWD
                      (alias: -w, --workspaces)
+
+Both u and ui ignore the semver ranges in package.json and go to latest.
+npm is the exception: it has no --latest, so `pm u` stays range-bound there
+(use `pm x npm-check-updates` for major bumps).
 
 Update scope without -r is the package.json in $PWD, except yarn berry:
 `yarn up` / `yarn upgrade-interactive` always span the whole project.
@@ -173,11 +177,12 @@ main() {
         pnpm) exec pnpm run "$script" "$@" ;;
         bun)  exec bun run "$script" "$@" ;;
       esac ;;
-    u|update|upgrade)
+    u|up|update|upgrade)
       _pm_take_recursive "$@"
       set -- ${_pm_args[@]+"${_pm_args[@]}"}
       case "$pm" in
         npm)
+          # npm has no --latest, so this is the one range-bound update.
           if [ "$_pm_recursive" = 1 ]; then
             exec npm update --workspaces --include-workspace-root "$@"
           fi
@@ -188,17 +193,17 @@ main() {
               echo "pm: yarn 1 cannot update every workspace at once (upgrade to yarn berry)" >&2
               return 1
             fi
-            exec yarn upgrade "$@"
+            exec yarn upgrade --latest "$@"
           fi
-          # Berry's `up` is always project-wide and needs an explicit pattern.
+          # Berry's `up` is always project-wide, goes to latest, and needs a pattern.
           if [ $# -eq 0 ]; then exec yarn up '*'; fi
           exec yarn up "$@" ;;
         pnpm)
-          if [ "$_pm_recursive" = 1 ]; then exec pnpm update -r "$@"; fi
-          exec pnpm update "$@" ;;
+          if [ "$_pm_recursive" = 1 ]; then exec pnpm update --latest -r "$@"; fi
+          exec pnpm update --latest "$@" ;;
         bun)
-          if [ "$_pm_recursive" = 1 ]; then exec bun update --filter '*' "$@"; fi
-          exec bun update "$@" ;;
+          if [ "$_pm_recursive" = 1 ]; then exec bun update --latest --filter '*' "$@"; fi
+          exec bun update --latest "$@" ;;
       esac ;;
     ui|update-interactive|upgrade-interactive)
       _pm_take_recursive "$@"
@@ -222,23 +227,6 @@ main() {
         bun)
           echo "pm: bun has no interactive upgrade (use 'pm u')" >&2
           return 1 ;;
-      esac ;;
-    s|start)
-      if [ ! -f package.json ]; then
-        echo "No package.json found"
-        return 1
-      fi
-
-      local startCommand='start'
-      if [ "$(jq '.scripts.dev' package.json)" != "null" ]; then
-        startCommand='dev'
-      fi
-
-      case "$pm" in
-        npm)  exec npm run "$@" ;;
-        yarn) exec yarn run "$@" ;;
-        pnpm) exec pnpm run "$@" ;;
-        bun)  exec bun run "$@" ;;
       esac ;;
     *)
       exec "$pm" "$sub" "$@" ;;
