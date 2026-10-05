@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# claude-resolve-git-conflicts: hand the current merge/rebase conflicts to claude.
+#
+# Collects the unmerged files (or the ones passed as arguments), builds a
+# prompt that states which side is "ours" and which is "theirs" for the
+# operation in progress (this is inverted during a rebase, which is the usual
+# source of wrong resolutions), and launches claude on it.
+#
+# claude stages the files it resolves; it is told not to commit and not to
+# continue the rebase/merge, so the result is reviewable before you proceed.
+
+set -euo pipefail
+
+NOCOLOR='\033[0m'
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+
+model="sonnet"
+print_mode=0
+dryRun=0
+extraInstructions=""
+files=()
+
+usage() {
+  cat <<'EOF'
+claude-resolve-git-conflicts - send the current conflicts to claude
+
+Usage: claude-resolve-git-conflicts [options] [file...]
+
+With no file arguments, every unmerged file in the repository is sent.
+File arguments must be unmerged; anything else is rejected.
+
+Options:
+  -m, --model <model>       model to use (default: sonnet)
+  -i, --instructions <text> extra instructions appended to the prompt
+  -p, --print               run headless (claude -p) instead of interactive
+  -n, --dry-run             print the prompt and exit without calling claude
+  -h, --help                show this help
+
+claude is told to stage what it resolves, and not to commit or to run
+`git rebase --continue` / `git merge --continue`.
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -m|--model) model="${2:?--model needs a value}"; shift 2 ;;
+    -i|--instructions) extraInstructions="${2:?--instructions needs a value}"; shift 2 ;;
+    -p|--print) print_mode=1; shift ;;
+    -n|--dry-run) dryRun=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    --) shift; files+=("$@"); break ;;
+    -*) echo -e "${RED}claude-resolve-git-conflicts: unknown option '$1'${NOCOLOR}" >&2; usage >&2; exit 1 ;;
+    *) files+=("$1"); shift ;;
+  esac
+done
+
+if ! gitDir=$(git rev-parse --git-dir 2>/dev/null); then
+  echo -e "${RED}claude-resolve-git-conflicts: not a git repository${NOCOLOR}" >&2
+  exit 1
+fi
+repoRoot=$(git rev-parse --show-toplevel)
+
+# Unmerged paths, relative to the repo root, NUL-separated for odd filenames.
+unmerged=()
+while IFS= read -r -d '' path; do
+  unmerged+=("$path")
+done < <(git diff --name-only --diff-filter=U -z)
+
+if [ ${#unmerged[@]} -eq 0 ]; then
+  echo "claude-resolve-git-conflicts: no conflicted files"
+  exit 0
+fi
+
+if [ ${#files[@]} -eq 0 ]; then
+  files=("${unmerged[@]}")
+else
+  # Arguments may be given relative to $PWD; normalize to repo-root relative
+  # and check each one is actually conflicted, so a typo is not sent silently.
+  normalized=()
+  for f in "${files[@]}"; do
+    # --full-name resolves a $PWD-relative argument to a repo-root-relative
+    # path; an unmerged file has 3 stage entries, hence head -1.
+    rel=$(git ls-files --full-name --error-unmatch -- "$f" 2>/dev/null | head -1 || true)
+    [ -z "$rel" ] && rel="$f"
+    found=0
+    for u in "${unmerged[@]}"; do
+      if [ "$u" = "$rel" ]; then found=1; break; fi
+    done
+    if [ "$found" -eq 0 ]; then
+      echo -e "${RED}claude-resolve-git-conflicts: '$f' is not an unmerged file${NOCOLOR}" >&2
+      echo -e "${YELLOW}Conflicted files:${NOCOLOR}" >&2
+      printf '  %s\n' "${unmerged[@]}" >&2
+      exit 1
+    fi
+    normalized+=("$rel")
+  done
+  files=("${normalized[@]}")
+fi
+
+# Describe the operation in progress, and what ours/theirs mean in it.
+describeState() {
+  local head onto branch pick
+  if [ -f "$gitDir/rebase-merge/head-name" ] || [ -d "$gitDir/rebase-apply" ]; then
+    branch=$(cat "$gitDir/rebase-merge/head-name" 2>/dev/null || cat "$gitDir/rebase-apply/head-name" 2>/dev/null || echo "HEAD")
+    onto=$(cat "$gitDir/rebase-merge/onto" 2>/dev/null || cat "$gitDir/rebase-apply/onto" 2>/dev/null || echo "")
+    printf 'Operation: rebase of %s' "$branch"
+    [ -n "$onto" ] && printf ' onto %s (%s)' "$(git rev-parse --short "$onto")" "$(git name-rev --name-only "$onto" 2>/dev/null || echo unknown)"
+    printf '\n'
+    printf 'Careful: during a rebase the sides are inverted. "ours"/HEAD (<<<<<<<) is the upstream you are rebasing onto, "theirs" (>>>>>>>) is the commit of %s being replayed.\n' "$branch"
+    printf 'The commit being replayed is: %s\n' "$(git log -1 --oneline REBASE_HEAD 2>/dev/null || echo unknown)"
+    return
+  fi
+  if [ -f "$gitDir/MERGE_HEAD" ]; then
+    head=$(git name-rev --name-only MERGE_HEAD 2>/dev/null || echo MERGE_HEAD)
+    branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)
+    printf 'Operation: merge of %s into %s\n' "$head" "$branch"
+    printf '"ours"/HEAD (<<<<<<<) is %s, "theirs" (>>>>>>>) is %s.\n' "$branch" "$head"
+    return
+  fi
+  if [ -f "$gitDir/CHERRY_PICK_HEAD" ]; then
+    pick=$(git log -1 --oneline CHERRY_PICK_HEAD 2>/dev/null || echo unknown)
+    printf 'Operation: cherry-pick of %s\n' "$pick"
+    printf '"ours"/HEAD (<<<<<<<) is the current branch, "theirs" (>>>>>>>) is the picked commit.\n'
+    return
+  fi
+  if [ -f "$gitDir/REVERT_HEAD" ]; then
+    printf 'Operation: revert of %s\n' "$(git log -1 --oneline REVERT_HEAD 2>/dev/null || echo unknown)"
+    printf '"ours"/HEAD (<<<<<<<) is the current branch, "theirs" (>>>>>>>) is the revert.\n'
+    return
+  fi
+  printf 'Operation: unknown (no merge, rebase, cherry-pick or revert in progress; conflicts may come from `git stash pop` or `git checkout -m`).\n'
+}
+
+fileList=$(printf -- '- %s\n' "${files[@]}")
+
+prompt="Resolve the git conflicts in this repository.
+
+$(describeState)
+Conflicted files ($((${#files[@]})) of ${#unmerged[@]} unmerged):
+$fileList
+For each file:
+1. Read the conflicted regions and enough of the surrounding code to understand both sides.
+2. Establish the intent of each side before choosing. Use \`git log\`, \`git show\` and \`git diff\` on the two sides when the intent is not obvious from the diff alone.
+3. Keep both intents when they are compatible; take one side only when they are genuinely exclusive. Never resolve by deleting work you did not understand.
+4. Remove every conflict marker (<<<<<<<, =======, >>>>>>>) and make sure the result parses and is coherent with the rest of the file.
+5. \`git add\` the file once resolved.
+
+Do not commit. Do not run \`git rebase --continue\`, \`git merge --continue\`, \`git cherry-pick --continue\` or \`--abort\`. Stop once the listed files are staged.
+
+Report per file: what each side did, what you kept, and anything you were not sure about. Say so explicitly if a resolution needs human review rather than presenting a guess as settled."
+
+if [ -n "$extraInstructions" ]; then
+  prompt="$prompt
+
+Additional instructions from the user:
+$extraInstructions"
+fi
+
+if [ "$dryRun" -eq 1 ]; then
+  printf '%s\n' "$prompt"
+  exit 0
+fi
+
+if ! command -v claude >/dev/null 2>&1; then
+  echo -e "${RED}claude-resolve-git-conflicts: claude not found in PATH${NOCOLOR}" >&2
+  exit 1
+fi
+
+cd "$repoRoot"
+if [ "$print_mode" -eq 1 ]; then
+  exec claude --model "$model" -p "$prompt"
+fi
+exec claude --model "$model" "$prompt"
