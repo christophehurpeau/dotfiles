@@ -37,6 +37,54 @@ SHORT_SHA=${SHA:0:8}
 COMMIT_TITLE=$(printf '%s' "$branch_json" | jq -r '.commit.commit.message | split("\n")[0]')
 COMMIT_AUTHOR=$(printf '%s' "$branch_json" | jq -r '.commit.commit.author.name // "?"')
 
+# --- trigger + wait + pull --------------------------------------------------
+latest_release_run_id() {
+  gh run list --workflow "$WORKFLOW_NAME" --branch "$BRANCH" --event workflow_dispatch \
+    --limit 1 --json databaseId --jq '.[0].databaseId // 0'
+}
+
+trigger_and_wait() {
+  local before_id run_id run_url conclusion deadline current
+  before_id=$(latest_release_run_id)
+
+  info "Triggering workflow '$WORKFLOW_NAME' on ref $BRANCH..."
+  gh workflow run "$WORKFLOW_NAME" --ref "$BRANCH"
+
+  # Run ids are monotonic: wait for one newer than the latest before triggering.
+  deadline=$(( $(date +%s) + 60 ))
+  run_id=$before_id
+  while [ "$run_id" -le "$before_id" ]; do
+    if [ "$(date +%s)" -ge "$deadline" ]; then
+      error "Triggered run did not appear after 60s."
+      exit 1
+    fi
+    sleep 3
+    run_id=$(latest_release_run_id)
+  done
+  run_url=$(gh run view "$run_id" --json url --jq .url)
+  info "Run: $run_url"
+
+  gh run watch "$run_id" --interval "$POLL_INTERVAL" || true
+  conclusion=$(gh run view "$run_id" --json conclusion --jq .conclusion)
+
+  rule
+  if [ "$conclusion" != "success" ]; then
+    error "$WORKFLOW_NAME run $conclusion: $run_url"
+    gh run view "$run_id" || true
+    gh run view "$run_id" --log-failed || true
+    exit 1
+  fi
+  ok "$WORKFLOW_NAME run succeeded."
+
+  current=$(git branch --show-current 2>/dev/null || true)
+  if [ "$current" = "$BRANCH" ]; then
+    git pull --ff-only
+  else
+    git fetch origin "$BRANCH:$BRANCH"
+  fi
+  printf '%sPulled%s %s\n' "$BOLD" "$RESET" "$(git log -1 --format='%h %s' "$BRANCH")"
+}
+
 printf '%sRepo%s %s  %sBranch%s %s\n' "$BOLD" "$RESET" "$REPO" "$BOLD" "$RESET" "$BRANCH"
 printf '%sCommit%s %s%s%s %s  %s(%s)%s\n' "$BOLD" "$RESET" "$YELLOW" "$SHORT_SHA" "$RESET" "$COMMIT_TITLE" "$DIM" "$COMMIT_AUTHOR" "$RESET"
 
@@ -47,15 +95,18 @@ if [ -n "$SKIP_CHECKS" ]; then
     [yY][eE][sS]|[yY]) ;;
     *) info "Aborted."; exit 0 ;;
   esac
-  info "Triggering workflow '$WORKFLOW_NAME' on ref $BRANCH..."
-  gh workflow run "$WORKFLOW_NAME" --ref "$BRANCH"
+  trigger_and_wait
   exit 0
 fi
+
+# Checks never waited on (PR-only, irrelevant to a release).
+IGNORED_CHECKS='["reviewflow"]'
 
 # --- required status checks (from branch protection, best-effort) -----------
 required_json=$(gh api "/repos/$REPO/branches/$BRANCH/protection/required_status_checks" 2>/dev/null || true)
 if [ -n "$required_json" ]; then
-  required=$(printf '%s' "$required_json" | jq -c '[.contexts[]?, (.checks[]?.context)] | unique')
+  required=$(printf '%s' "$required_json" | jq -c --argjson ign "$IGNORED_CHECKS" \
+    '[.contexts[]?, (.checks[]?.context)] | unique | map(select(IN($ign[]) | not))')
 else
   required='[]'
 fi
@@ -72,8 +123,8 @@ fetch_state() {
 
   # normalize check-runs + commit statuses into [{name,state}] with state in
   # success | failure | pending
-  checks_state=$(jq -n --argjson cr "$check_runs" --argjson st "$statuses" '
-    ($cr | map({
+  checks_state=$(jq -n --argjson cr "$check_runs" --argjson st "$statuses" --argjson ign "$IGNORED_CHECKS" '
+    (($cr | map({
       name: .name,
       state: (if .status != "completed" then "pending"
               elif (.conclusion | IN("success","skipped","neutral")) then "success"
@@ -84,7 +135,7 @@ fetch_state() {
       state: (if .state == "success" then "success"
               elif .state == "pending" then "pending"
               else "failure" end)
-    }))')
+    }))) | map(select(.name | IN($ign[]) | not))')
 
   pending_runs=$(printf '%s' "$runs_json" | jq '[.[] | select(.status != "completed")] | length')
   failed_runs=$(printf '%s' "$runs_json" | jq '[.[] | select(.status == "completed" and (.conclusion | IN("success","skipped") | not))] | length')
@@ -217,6 +268,4 @@ case "$confirm" in
   *) info "Aborted."; exit 0 ;;
 esac
 
-# --- trigger ----------------------------------------------------------------
-info "Triggering workflow '$WORKFLOW_NAME' on ref $BRANCH..."
-gh workflow run "$WORKFLOW_NAME" --ref "$BRANCH"
+trigger_and_wait
