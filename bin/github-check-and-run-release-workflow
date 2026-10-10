@@ -1,14 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: github-check-and-run-release-workflow [branch] [workflow-name]
+# Usage: github-check-and-run-release-workflow [--yes] [branch] [workflow-name]
+#        --yes, -y      non-interactive: trigger without prompting, only if CI passed
 # Env:   POLL_INTERVAL  seconds between checks while waiting (default 15)
 #        SKIP_CHECKS    set to skip CI checks and trigger the workflow directly
 #        NO_COLOR       set to disable colored output
-BRANCH=${1:-main}
-WORKFLOW_NAME=${2:-Release}
 POLL_INTERVAL=${POLL_INTERVAL:-15}
 SKIP_CHECKS=${SKIP_CHECKS:-}
+
+ASSUME_YES=0
+positional=()
+for arg in "$@"; do
+  case "$arg" in
+    --yes|-y) ASSUME_YES=1 ;;
+    -*)
+      echo "Unknown option: $arg" >&2
+      echo "Usage: github-check-and-run-release-workflow [--yes] [branch] [workflow-name]" >&2
+      exit 2
+      ;;
+    *) positional+=("$arg") ;;
+  esac
+done
+BRANCH=${positional[0]:-main}
+WORKFLOW_NAME=${positional[1]:-Release}
 
 command -v gh >/dev/null || { echo "gh CLI is required (https://cli.github.com)" >&2; exit 1; }
 command -v jq >/dev/null || { echo "jq is required (https://jqlang.github.io/jq)" >&2; exit 1; }
@@ -87,6 +102,11 @@ trigger_and_wait() {
 
 printf '%sRepo%s %s  %sBranch%s %s\n' "$BOLD" "$RESET" "$REPO" "$BOLD" "$RESET" "$BRANCH"
 printf '%sCommit%s %s%s%s %s  %s(%s)%s\n' "$BOLD" "$RESET" "$YELLOW" "$SHORT_SHA" "$RESET" "$COMMIT_TITLE" "$DIM" "$COMMIT_AUTHOR" "$RESET"
+
+if [ -n "$SKIP_CHECKS" ] && [ "$ASSUME_YES" -eq 1 ]; then
+  error "--yes requires CI checks: refusing to combine it with SKIP_CHECKS."
+  exit 2
+fi
 
 if [ -n "$SKIP_CHECKS" ]; then
   warn "SKIP_CHECKS set — skipping CI status checks."
@@ -252,16 +272,37 @@ fi
 
 rule
 # --- decision ---------------------------------------------------------------
+# With --yes, never prompt: trigger only when CI reported and passed.
+if [ "$ASSUME_YES" -eq 1 ] && [ "$startup_timed_out" -eq 1 ]; then
+  error "Not triggering with --yes: no CI checks reported."
+  exit 1
+fi
+# Commit statuses and check runs from outside GitHub Actions are not in failed_runs.
+failed_checks=$(printf '%s' "$checks_state" | jq '[.[] | select(.state == "failure")] | length')
+if [ "$ASSUME_YES" -eq 1 ] && [ "$failed_checks" -gt 0 ]; then
+  error "Not triggering with --yes: $failed_checks check(s) failed:"
+  printf '%s' "$checks_state" | jq -r '.[] | select(.state == "failure") | "  \(.name)"' >&2
+  exit 1
+fi
 if [ "$failed_runs" -gt 0 ]; then
   error "$failed_runs workflow(s) did not succeed for this commit:"
   printf '%s' "$runs_json" | jq -r \
     --arg r "$RED" --arg z "$RESET" '
     .[] | select(.status == "completed" and (.conclusion | IN("success","skipped") | not)) |
     "  \($r)●\($z) \(.name) — \(.conclusion)  \(.html_url)"'
+  if [ "$ASSUME_YES" -eq 1 ]; then
+    error "Not triggering with --yes: CI did not pass."
+    exit 1
+  fi
   read -r -p "$(printf '%sProceed to trigger %s anyway? (y/N) %s' "$YELLOW" "$WORKFLOW_NAME" "$RESET")" confirm
 else
   ok "All workflow runs and required checks passed."
-  read -r -p "$(printf 'Trigger %s%s%s on %s? (y/N) ' "$BOLD" "$WORKFLOW_NAME" "$RESET" "$BRANCH")" confirm
+  if [ "$ASSUME_YES" -eq 1 ]; then
+    info "Triggering because of --yes."
+    confirm=y
+  else
+    read -r -p "$(printf 'Trigger %s%s%s on %s? (y/N) ' "$BOLD" "$WORKFLOW_NAME" "$RESET" "$BRANCH")" confirm
+  fi
 fi
 case "$confirm" in
   [yY][eE][sS]|[yY]) ;;
