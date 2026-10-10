@@ -2,10 +2,11 @@ export LANG=en_US.UTF-8
 
 # Preferred editor for local and remote sessions
 if [[ -n $SSH_CONNECTION ]]; then
-  export EDITOR='code'
-else
   export EDITOR='nano'
+else
+  export EDITOR='code --wait'
 fi
+
 
 export REACT_EDITOR='code'
 export "PATH=$HOME/bin:$HOME/.dotfiles/bin:$PATH:/opt/homebrew/bin"
