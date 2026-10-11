@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Local equivalent of pob's GitHub "Release" workflow: build, then pob-version
+# bumps, commits, tags, pushes and creates the GitHub releases.
+#
+# Usage: pob-release [--dry-run] [--allow-no-tags] [--bump-dependents-highest-as major|minor|patch] [-y]
+# Env:   NO_COLOR  set to disable colored output
+#
+# The GitHub token comes from `gh auth token`: it is passed to pob-version
+# through its environment only, never printed nor put on a command line, and
+# masked in the output.
+
+DRY_RUN=""
+ALLOW_NO_TAGS=""
+BUMP_DEPENDENTS_HIGHEST_AS=major
+YES=""
+
+usage() { sed -n '7p' "$0" | sed 's/^# //' >&2; }
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run) DRY_RUN=1 ;;
+    --allow-no-tags) ALLOW_NO_TAGS=1 ;;
+    --bump-dependents-highest-as)
+      shift
+      case "${1:-}" in
+        major|minor|patch) BUMP_DEPENDENTS_HIGHEST_AS=$1 ;;
+        *) usage; exit 1 ;;
+      esac
+      ;;
+    -y|--yes) YES=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage; exit 1 ;;
+  esac
+  shift
+done
+
+command -v gh >/dev/null || { echo "gh CLI is required (https://cli.github.com)" >&2; exit 1; }
+command -v perl >/dev/null || { echo "perl is required" >&2; exit 1; }
+
+# --- colors -----------------------------------------------------------------
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && command -v tput >/dev/null && [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]; then
+  BOLD=$(tput bold); DIM=$(tput dim); RESET=$(tput sgr0)
+  RED=$(tput setaf 1); GREEN=$(tput setaf 2); YELLOW=$(tput setaf 3); CYAN=$(tput setaf 6)
+else
+  BOLD=""; DIM=""; RESET=""; RED=""; GREEN=""; YELLOW=""; CYAN=""
+fi
+
+info()  { printf '%s%s%s\n' "$CYAN" "$1" "$RESET"; }
+warn()  { printf '%s%s%s\n' "$YELLOW" "$1" "$RESET" >&2; }
+error() { printf '%s%s%s\n' "$RED" "$1" "$RESET" >&2; }
+ok()    { printf '%s%s%s\n' "$GREEN" "$1" "$RESET"; }
+rule()  { printf '%s%s%s\n' "$DIM" "----------------------------------------------------------------" "$RESET"; }
+
+# --- package manager --------------------------------------------------------
+ROOT=$(git rev-parse --show-toplevel)
+cd "$ROOT"
+
+if [ -f pnpm-lock.yaml ]; then
+  pm_install() { pnpm install --frozen-lockfile; }
+  pm_run() { pnpm run "$@"; }
+  pob_version() { pnpm exec pob-version "$@"; }
+elif [ -f yarn.lock ]; then
+  pm_install() { yarn install --immutable; }
+  pm_run() { yarn run "$@"; }
+  pob_version() { yarn pob-version "$@"; }
+else
+  error "No pnpm-lock.yaml nor yarn.lock in $ROOT"
+  exit 1
+fi
+
+# --- pre-checks -------------------------------------------------------------
+MAIN_BRANCH=$(git-main-branch)
+BRANCH=$(git branch --show-current)
+
+if [ "$BRANCH" != "$MAIN_BRANCH" ]; then
+  error "Releases are made from $MAIN_BRANCH (current branch: ${BRANCH:-detached})."
+  exit 1
+fi
+
+if [ -n "$(git status --porcelain)" ]; then
+  error "Working tree is not clean:"
+  git status --short >&2
+  exit 1
+fi
+
+info "Fetching origin..."
+git fetch origin --tags --quiet
+
+if [ -n "$(git log "HEAD..origin/$MAIN_BRANCH" --oneline)" ]; then
+  error "$MAIN_BRANCH is behind origin/$MAIN_BRANCH: pull first."
+  exit 1
+fi
+
+if [ -z "$ALLOW_NO_TAGS" ] && [ -z "$(git tag)" ]; then
+  error "No git tags found (first release? pass --allow-no-tags)."
+  exit 1
+fi
+
+unpushed=$(git log "origin/$MAIN_BRANCH..HEAD" --format='%h %s')
+if [ -n "$unpushed" ]; then
+  warn "Unpushed commits, pushed with the release:"
+  printf '  %s\n' "$unpushed" >&2
+fi
+
+gh auth status >/dev/null 2>&1 || { error "gh is not logged in: run gh auth login."; exit 1; }
+
+printf '%sRepo%s %s  %sBranch%s %s  %sCommit%s %s\n' \
+  "$BOLD" "$RESET" "$(basename "$ROOT")" \
+  "$BOLD" "$RESET" "$MAIN_BRANCH" \
+  "$BOLD" "$RESET" "$(git log -1 --format='%h %s')"
+rule
+
+# --- build ------------------------------------------------------------------
+info "Installing dependencies..."
+pm_install
+info "Building..."
+pm_run build
+rule
+
+info "Versions to release:"
+pob_version --dry-run --bump-dependents-highest-as="$BUMP_DEPENDENTS_HIGHEST_AS"
+rule
+
+if [ -n "$DRY_RUN" ]; then
+  ok "Dry run: nothing released."
+  exit 0
+fi
+
+if [ -z "$YES" ]; then
+  read -r -p "$(printf 'Release, push and create GitHub releases on %s%s%s? (y/N) ' "$BOLD" "$MAIN_BRANCH" "$RESET")" confirm
+  case "$confirm" in
+    [yY][eE][sS]|[yY]) ;;
+    *) info "Aborted."; exit 0 ;;
+  esac
+fi
+
+# --- release ----------------------------------------------------------------
+# Subshell: the token lives in the environment of pob-version and of the
+# masking filter only, never in argv (visible in ps) nor in this shell.
+(
+  set +x
+  GH_TOKEN=$(gh auth token)
+  [ -n "$GH_TOKEN" ] || { error "gh auth token returned nothing."; exit 1; }
+  export GH_TOKEN
+  POB_GIT_HOOKS=0 YARN_ENABLE_IMMUTABLE_INSTALLS=false \
+    pob_version --create-release=github \
+      --bump-dependents-highest-as="$BUMP_DEPENDENTS_HIGHEST_AS" \
+      -m 'chore: release [skip ci]\n\n%t' 2>&1 \
+    | perl -pe 'BEGIN { $| = 1; $t = $ENV{GH_TOKEN} } s/\Q$t\E/***/g'
+)
+
+rule
+ok "Released: $(git log -1 --format='%h %s')"
+git tag --points-at HEAD | sed 's/^/  /'
