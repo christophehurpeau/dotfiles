@@ -27,6 +27,16 @@ pretty-time-ms-to-var() {
 	typeset -g "${var}"="${human}"
 }
 
+# `brew shellenv` exports FPATH, so child shells inherit it instead of their
+# built-in defaults; after a zsh upgrade it points to a removed Cellar dir
+# (compinit/bashcompinit not found). Stop exporting it and repair fpath.
+typeset +x FPATH
+() {
+  fpath=(${^fpath}(N-/))
+  local -a found=(${^fpath}/compinit(N))
+  (( $#found )) || fpath+=("$(brew --prefix)/share/zsh/functions")
+}
+
 # make sure iterm uses brew site functions even if the wrong zsh is used.
 fpath+=("$(brew --prefix)/share/zsh/site-functions")
 fpath+=("$HOME/.dotfiles/completions")
