@@ -22,7 +22,9 @@ rm ~/.zshrc
 echo "source \"$BASEDIR/bashrc\"" >> ~/.bashrc
 echo "source \"$BASEDIR/zshrc\"" >> ~/.zshrc
 
-ln -sf "$BASEDIR/tmux.conf" ~/.tmux.conf
+if [ ! -e ~/.tmux.conf ]; then
+  ln -sf "$BASEDIR/tmux.conf" ~/.tmux.conf
+fi
 
 # install ssh config
 if [ ! -f ~/.ssh/config ]; then
