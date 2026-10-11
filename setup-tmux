@@ -1,0 +1,52 @@
+#!/bin/sh
+# Configure tmux only; the optional home directory is useful for isolated checks.
+set -eu
+
+tmux_home=${1:-"$HOME"}
+tmux_entrypoint="$tmux_home/.tmux.conf"
+tmux_local="$tmux_home/.config/tmux/local.conf"
+tmux_repo=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+mkdir -p "$tmux_home/.config/tmux"
+tmux_loader=$(mktemp "$tmux_home/.tmux.conf.XXXXXX")
+trap 'rm -f "$tmux_loader"' EXIT HUP INT TERM
+cat > "$tmux_loader" <<'CONF'
+# Managed by dotfiles/setup-tmux: shared configuration, then machine overrides.
+source-file ~/.dotfiles/tmux.conf
+source-file -q ~/.config/tmux/machine-colors.conf
+source-file -q ~/.config/tmux/local.conf
+CONF
+chmod 644 "$tmux_loader"
+
+if [ -L "$tmux_entrypoint" ]; then
+  tmux_target=$(readlink "$tmux_entrypoint")
+  case "$tmux_target" in
+    "$tmux_repo/tmux.conf"|"$tmux_home/.dotfiles/tmux.conf"|.dotfiles/tmux.conf)
+      rm "$tmux_entrypoint"
+      ;;
+    *)
+      printf 'Cannot migrate unrelated tmux symlink: %s\n' "$tmux_entrypoint" >&2
+      exit 1
+      ;;
+  esac
+elif [ -e "$tmux_entrypoint" ]; then
+  if cmp -s "$tmux_loader" "$tmux_entrypoint"; then
+    printf 'tmux loader already configured\n'
+    exit 0
+  fi
+  if [ -e "$tmux_local" ] || [ -L "$tmux_local" ]; then
+    printf 'Both tmux entrypoint and local overrides exist; refusing to overwrite either\n' >&2
+    exit 1
+  fi
+  mv "$tmux_entrypoint" "$tmux_local"
+fi
+
+if [ ! -e "$tmux_local" ] && [ ! -L "$tmux_local" ]; then
+  cat > "$tmux_local" <<'CONF'
+# Local tmux overrides; this file is not tracked by dotfiles.
+# Loaded last, after shared settings and optional machine colours.
+# Example: set -g status-style 'fg=black,bg=colour75'
+CONF
+fi
+mv "$tmux_loader" "$tmux_entrypoint"
+printf 'tmux configured; local overrides: %s\n' "$tmux_local"

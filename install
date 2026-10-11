@@ -1,6 +1,6 @@
 #!/bin/zsh
 
-BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASEDIR="${0:A:h}"
 
 # for github codespaces
 if [ "$BASEDIR" != "$HOME/.dotfiles" ]; then
@@ -22,9 +22,7 @@ rm ~/.zshrc
 echo "source \"$BASEDIR/bashrc\"" >> ~/.bashrc
 echo "source \"$BASEDIR/zshrc\"" >> ~/.zshrc
 
-if [ ! -e ~/.tmux.conf ]; then
-  ln -sf "$BASEDIR/tmux.conf" ~/.tmux.conf
-fi
+sh "$BASEDIR/setup-tmux"
 
 # install ssh config
 if [ ! -f ~/.ssh/config ]; then
