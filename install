@@ -22,6 +22,8 @@ rm ~/.zshrc
 echo "source \"$BASEDIR/bashrc\"" >> ~/.bashrc
 echo "source \"$BASEDIR/zshrc\"" >> ~/.zshrc
 
+ln -sf "$BASEDIR/tmux.conf" ~/.tmux.conf
+
 # install ssh config
 if [ ! -f ~/.ssh/config ]; then
   echo "Host *\n  ControlMaster auto\n  ControlPath ~/.ssh/main-%r@%h:%p\n  ServerAliveInterval 5\n  AddKeysToAgent yes\n  UseKeyChain yes\n" > ~/.ssh/config
