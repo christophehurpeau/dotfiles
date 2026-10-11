@@ -13,7 +13,17 @@ My gitted configuration files
 3. `~/.config/tmux/local.conf` — optional settings specific to this computer, loaded last.
 
 Edit `~/.config/tmux/local.conf` to override any shared setting without changing
-the repository. For example:
+the repository. The shared theme uses a dark bar, a coloured hostname badge and
+active window, spaced window labels, and a muted session name and clock. Its
+default accent is blue. Set the machine's accent in `machine-colors.conf`:
+
+```tmux
+set -g @machine-color 'colour208'
+```
+
+This changes the hostname badge, active window text and active pane border together.
+The hostname uses explicit RGB near-black text for contrast, independent of the
+terminal's bold-black palette. For other local overrides, for example:
 
 ```tmux
 set -g status-style 'fg=black,bg=colour75'
@@ -40,6 +50,22 @@ tmux source-file ~/.tmux.conf
 ```
 
 Without a running tmux server, the next session loads the config automatically.
+
+## zsh and Pure
+
+`zshrc` is the shared configuration for macOS and Linux: Pure prompt, autosuggestions,
+syntax highlighting and common aliases. macOS uses Homebrew's dependencies;
+Linux uses the distro's zsh plugin packages and Pure at `~/.zsh/pure` (v1.24.0).
+
+`sh ~/.dotfiles/setup-zsh` creates `.zshrc`, `.zprofile` and `.zshenv` loaders.
+Existing files are backed up as `*.before-dotfiles`; repeated runs are idempotent.
+`.zprofile` retains `.profile`'s login PATH and interactive SSH tmux attachment.
+`.zshenv` supplies the user bin paths for noninteractive SSH commands too.
+Local interactive overrides can go in `~/.config/zsh/local.zsh`.
+
+Install zsh and the plugins first. On managed Linux hosts, installation, setup
+and login-shell selection are handled by infra's Ansible `zsh` role. The general
+dotfiles installer also invokes `setup-zsh`.
 
 ## Installation
 

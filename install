@@ -17,10 +17,9 @@ if [ ! -f ~/.gitconfig ]; then
   echo "[include]\n  path = ~/.dotfiles/git/gitconfig-entrypoint.ini" > ~/.gitconfig
 fi
 touch ~/.bash_aliases
-rm ~/.zshrc
 
 echo "source \"$BASEDIR/bashrc\"" >> ~/.bashrc
-echo "source \"$BASEDIR/zshrc\"" >> ~/.zshrc
+sh "$BASEDIR/setup-zsh"
 
 sh "$BASEDIR/setup-tmux"
 

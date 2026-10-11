@@ -1,0 +1,51 @@
+#!/bin/sh
+# Configure zsh independently; packages and login shell are managed by Ansible.
+set -eu
+zsh_setup_home=${1:-"$HOME"}
+command -v zsh >/dev/null 2>&1 || {
+  printf 'Install zsh before running setup-zsh\n' >&2
+  exit 1
+}
+
+# Homebrew supplies Pure on macOS; Linux uses the same prompt from a pinned checkout.
+if ! command -v brew >/dev/null 2>&1 && [ ! -d "$zsh_setup_home/.zsh/pure" ]; then
+  mkdir -p "$zsh_setup_home/.zsh"
+  git clone --no-checkout https://github.com/sindresorhus/pure.git "$zsh_setup_home/.zsh/pure"
+  git -C "$zsh_setup_home/.zsh/pure" checkout --detach a2414eeece761bb8ba0281811f1ee8ad37cc986c
+fi
+
+zsh_setup_loader=$(mktemp)
+trap 'rm -f "$zsh_setup_loader"' EXIT HUP INT TERM
+zsh_write_loader() {
+  zsh_setup_target=$1
+  if [ -f "$zsh_setup_target" ] && cmp -s "$zsh_setup_loader" "$zsh_setup_target"; then
+    return
+  fi
+  if [ -e "$zsh_setup_target" ] || [ -L "$zsh_setup_target" ]; then
+    if [ -e "$zsh_setup_target.before-dotfiles" ] || [ -L "$zsh_setup_target.before-dotfiles" ]; then
+      printf 'Backup already exists for %s; refusing to overwrite\n' "$zsh_setup_target" >&2
+      exit 1
+    fi
+    mv "$zsh_setup_target" "$zsh_setup_target.before-dotfiles"
+  fi
+  cp "$zsh_setup_loader" "$zsh_setup_target"
+  chmod 644 "$zsh_setup_target"
+}
+
+cat > "$zsh_setup_loader" <<'CONF'
+# Managed by dotfiles/setup-zsh: common configuration, then local overrides.
+source "$HOME/.dotfiles/zshrc"
+[[ ! -f "$HOME/.config/zsh/local.zsh" ]] || source "$HOME/.config/zsh/local.zsh"
+CONF
+zsh_write_loader "$zsh_setup_home/.zshrc"
+cat > "$zsh_setup_loader" <<'CONF'
+# Managed by dotfiles/setup-zsh: retain the login PATH and SSH tmux attachment.
+[[ ! -f "$HOME/.profile" ]] || source "$HOME/.profile"
+CONF
+zsh_write_loader "$zsh_setup_home/.zprofile"
+cat > "$zsh_setup_loader" <<'CONF'
+# Managed by dotfiles/setup-zsh: PATH for interactive and SSH command shells.
+export PATH="$HOME/.local/bin:$HOME/bin:$HOME/.dotfiles/bin:$PATH"
+CONF
+zsh_write_loader "$zsh_setup_home/.zshenv"
+printf 'zsh loaders configured\n'

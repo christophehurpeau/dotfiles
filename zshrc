@@ -9,7 +9,10 @@ fi
 
 
 export REACT_EDITOR='code'
-export "PATH=$HOME/bin:$HOME/.dotfiles/bin:$PATH:/opt/homebrew/bin"
+export "PATH=$HOME/.local/bin:$HOME/bin:$HOME/.dotfiles/bin:$PATH"
+if [[ -d /opt/homebrew/bin ]]; then
+  export PATH="/opt/homebrew/bin:$PATH"
+fi
 
 pretty-time-ms-to-var() {
   local human total_ms=$1 var=$2
@@ -31,14 +34,23 @@ pretty-time-ms-to-var() {
 # built-in defaults; after a zsh upgrade it points to a removed Cellar dir
 # (compinit/bashcompinit not found). Stop exporting it and repair fpath.
 typeset +x FPATH
+typeset -g DOTFILES_BREW_PREFIX=''
+if (( $+commands[brew] )); then
+  DOTFILES_BREW_PREFIX=$(brew --prefix)
+fi
 () {
   fpath=(${^fpath}(N-/))
   local -a found=(${^fpath}/compinit(N))
-  (( $#found )) || fpath+=("$(brew --prefix)/share/zsh/functions")
+  if (( ! $#found )) && [[ -n $DOTFILES_BREW_PREFIX ]]; then
+    fpath+=("$DOTFILES_BREW_PREFIX/share/zsh/functions")
+  fi
 }
 
 # make sure iterm uses brew site functions even if the wrong zsh is used.
-fpath+=("$(brew --prefix)/share/zsh/site-functions")
+if [[ -n $DOTFILES_BREW_PREFIX ]]; then
+  fpath+=("$DOTFILES_BREW_PREFIX/share/zsh/site-functions")
+fi
+[[ -d $HOME/.zsh/pure ]] && fpath+=("$HOME/.zsh/pure")
 fpath+=("$HOME/.dotfiles/completions")
 autoload -U promptinit; promptinit
 autoload -Uz compinit ; compinit
@@ -46,8 +58,11 @@ autoload -Uz compinit ; compinit
 
 if [ "$CURSOR_AGENT" != "true" ] && [ "$AGENT" != "true" ] && [ "$AGENT" != "1" ] && [ "$NO_COLOR" != "1" ]; then
   # https://github.com/zsh-users/zsh-syntax-highlighting/blob/master/INSTALL.md
-  source $(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-  source $(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+  if [[ -n $DOTFILES_BREW_PREFIX ]]; then
+    source "$DOTFILES_BREW_PREFIX/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+  elif [[ -f /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]]; then
+    source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+  fi
 
 
   # optionally define some options
@@ -149,16 +164,18 @@ if [ "$CURSOR_AGENT" != "true" ] && [ "$AGENT" != "true" ] && [ "$AGENT" != "1" 
   # Others
 
   source ~/.dotfiles/bash_aliases
-  source ~/.bash_aliases
+  [[ -f ~/.bash_aliases ]] && source ~/.bash_aliases
 
   # if [[ -f ~/.env ]]; then
   #   eval $(cat ~/.env | sed 's/^/export /')
   # fi
 
 
-  HOMEBREW_COMMAND_NOT_FOUND_HANDLER="$(brew --repository)/Library/Homebrew/command-not-found/handler.sh"
-  if [ -f "$HOMEBREW_COMMAND_NOT_FOUND_HANDLER" ]; then
-    source "$HOMEBREW_COMMAND_NOT_FOUND_HANDLER";
+  if [[ -n $DOTFILES_BREW_PREFIX ]]; then
+    HOMEBREW_COMMAND_NOT_FOUND_HANDLER="$(brew --repository)/Library/Homebrew/command-not-found/handler.sh"
+    if [[ -f "$HOMEBREW_COMMAND_NOT_FOUND_HANDLER" ]]; then
+      source "$HOMEBREW_COMMAND_NOT_FOUND_HANDLER"
+    fi
   fi
 fi
 
@@ -169,3 +186,12 @@ setopt INC_APPEND_HISTORY
 # don't record commands prefixed with a space
 setopt HIST_IGNORE_SPACE
 # unsetopt share_history
+
+# Load syntax highlighting last, after widgets and key bindings.
+if [[ $CURSOR_AGENT != true && $AGENT != true && $AGENT != 1 && $NO_COLOR != 1 ]]; then
+  if [[ -n $DOTFILES_BREW_PREFIX ]]; then
+    source "$DOTFILES_BREW_PREFIX/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+  elif [[ -f /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
+    source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+  fi
+fi
