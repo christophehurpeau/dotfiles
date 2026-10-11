@@ -6,8 +6,25 @@ set -euo pipefail
 # Env:   POLL_INTERVAL  seconds between checks while waiting (default 15)
 #        SKIP_CHECKS    set to skip CI checks and trigger the workflow directly
 #        NO_COLOR       set to disable colored output
+#        AGENT_MODE     1/0 to force or disable agent mode, detected otherwise
+#
+# Agent mode (coding agent or no TTY): without --yes it is a dry run that checks
+# CI and prints the --yes command to trigger; output lists state changes only,
+# never a refreshed screen every POLL_INTERVAL.
 POLL_INTERVAL=${POLL_INTERVAL:-15}
 SKIP_CHECKS=${SKIP_CHECKS:-}
+
+detect_agent() {
+  case "${AGENT_MODE:-}" in
+    1) return 0 ;;
+    0) return 1 ;;
+  esac
+  [ -n "${CLAUDECODE:-}${AI_AGENT:-}${CODEX_SANDBOX:-}${CODEX_CI:-}${CURSOR_AGENT:-}${GEMINI_CLI:-}" ] && return 0
+  [ -t 0 ] && [ -t 1 ] && return 1
+  return 0
+}
+AGENT=0
+detect_agent && AGENT=1
 
 ASSUME_YES=0
 positional=()
@@ -24,6 +41,7 @@ for arg in "$@"; do
 done
 BRANCH=${positional[0]:-main}
 WORKFLOW_NAME=${positional[1]:-Release}
+YES_COMMAND="$(basename "$0") --yes${positional[*]:+ ${positional[*]}}"
 
 command -v gh >/dev/null || { echo "gh CLI is required (https://cli.github.com)" >&2; exit 1; }
 command -v jq >/dev/null || { echo "jq is required (https://jqlang.github.io/jq)" >&2; exit 1; }
@@ -58,6 +76,22 @@ latest_release_run_id() {
     --limit 1 --json databaseId --jq '.[0].databaseId // 0'
 }
 
+# Prints one line per change of job states, instead of gh run watch's full
+# screen every interval.
+watch_run_quietly() {
+  local run_id=$1 last="" current
+  while true; do
+    current=$(gh run view "$run_id" --json status,jobs --jq \
+      '.status + "|" + (.jobs | map("\(.name)=\(if .status == "completed" then .conclusion else .status end)") | join(" "))')
+    if [ "$current" != "$last" ]; then
+      printf '%s  %s\n' "$(date +%H:%M:%S)" "${current#*|}"
+      last=$current
+    fi
+    [ "${current%%|*}" = "completed" ] && return
+    sleep "$POLL_INTERVAL"
+  done
+}
+
 trigger_and_wait() {
   local before_id run_id run_url conclusion deadline current
   before_id=$(latest_release_run_id)
@@ -79,14 +113,22 @@ trigger_and_wait() {
   run_url=$(gh run view "$run_id" --json url --jq .url)
   info "Run: $run_url"
 
-  gh run watch "$run_id" --interval "$POLL_INTERVAL" || true
+  if [ "$AGENT" -eq 1 ]; then
+    watch_run_quietly "$run_id"
+  else
+    gh run watch "$run_id" --interval "$POLL_INTERVAL" || true
+  fi
   conclusion=$(gh run view "$run_id" --json conclusion --jq .conclusion)
 
   rule
   if [ "$conclusion" != "success" ]; then
     error "$WORKFLOW_NAME run $conclusion: $run_url"
     gh run view "$run_id" || true
-    gh run view "$run_id" --log-failed || true
+    if [ "$AGENT" -eq 1 ]; then
+      gh run view "$run_id" --log-failed 2>/dev/null | tail -n 200 || true
+    else
+      gh run view "$run_id" --log-failed || true
+    fi
     exit 1
   fi
   ok "$WORKFLOW_NAME run succeeded."
@@ -105,6 +147,11 @@ printf '%sCommit%s %s%s%s %s  %s(%s)%s\n' "$BOLD" "$RESET" "$YELLOW" "$SHORT_SHA
 
 if [ -n "$SKIP_CHECKS" ] && [ "$ASSUME_YES" -eq 1 ]; then
   error "--yes requires CI checks: refusing to combine it with SKIP_CHECKS."
+  exit 2
+fi
+
+if [ -n "$SKIP_CHECKS" ] && [ "$AGENT" -eq 1 ]; then
+  error "SKIP_CHECKS needs an interactive confirmation: refusing in agent mode."
   exit 2
 fi
 
@@ -223,6 +270,8 @@ STARTUP_WAIT=${STARTUP_WAIT:-120}
 start_epoch=$(date +%s)
 first=1
 startup_timed_out=0
+last_state=""
+last_waiting=""
 while true; do
   fetch_state
 
@@ -236,11 +285,20 @@ while true; do
     fi
   fi
 
-  if [ "$first" -eq 1 ] || [ "$pending_runs" -gt 0 ] || [ "$pending_required" -gt 0 ] || [ "$waiting_startup" -eq 1 ]; then
+  # Agent mode reprints only when a run or check changed state.
+  state=$(jq -cn --argjson r "$runs_json" --argjson c "$checks_state" \
+    '[($r | map([.name, .status, .conclusion]) | sort), ($c | map([.name, .state]) | sort)]')
+  if [ "$AGENT" -eq 1 ]; then
+    show_state=$([ "$state" != "$last_state" ] && echo 1 || echo 0)
+  else
+    show_state=$([ "$first" -eq 1 ] || [ "$pending_runs" -gt 0 ] || [ "$pending_required" -gt 0 ] || [ "$waiting_startup" -eq 1 ] && echo 1 || echo 0)
+  fi
+  if [ "$show_state" -eq 1 ]; then
     rule
     print_runs
     print_required
   fi
+  last_state=$state
   first=0
 
   # Block on: in-progress runs, actively-pending required checks, or CI not
@@ -260,7 +318,12 @@ while true; do
       waiting_desc="${waiting_desc}$pending_required required check(s) pending"
     fi
   fi
-  warn "Waiting: $waiting_desc — re-checking in ${POLL_INTERVAL}s (Ctrl-C to stop)"
+  if [ "$AGENT" -eq 0 ]; then
+    warn "Waiting: $waiting_desc — re-checking in ${POLL_INTERVAL}s (Ctrl-C to stop)"
+  elif [ "$waiting_desc" != "$last_waiting" ]; then
+    warn "Waiting: $waiting_desc"
+  fi
+  last_waiting=$waiting_desc
   sleep "$POLL_INTERVAL"
 done
 
@@ -272,14 +335,15 @@ fi
 
 rule
 # --- decision ---------------------------------------------------------------
-# With --yes, never prompt: trigger only when CI reported and passed.
-if [ "$ASSUME_YES" -eq 1 ] && [ "$startup_timed_out" -eq 1 ]; then
-  error "Not triggering with --yes: no CI checks reported."
+# With --yes or in agent mode, never prompt: trigger only when CI reported and passed.
+NO_PROMPT=$(( ASSUME_YES == 1 || AGENT == 1 ? 1 : 0 ))
+if [ "$NO_PROMPT" -eq 1 ] && [ "$startup_timed_out" -eq 1 ]; then
+  error "Not triggering: no CI checks reported."
   exit 1
 fi
 # Commit statuses and check runs from outside GitHub Actions are not in failed_runs.
 failed_checks=$(printf '%s' "$checks_state" | jq '[.[] | select(.state == "failure")] | length')
-if [ "$ASSUME_YES" -eq 1 ] && [ "$failed_checks" -gt 0 ]; then
+if [ "$NO_PROMPT" -eq 1 ] && [ "$failed_checks" -gt 0 ]; then
   error "Not triggering with --yes: $failed_checks check(s) failed:"
   printf '%s' "$checks_state" | jq -r '.[] | select(.state == "failure") | "  \(.name)"' >&2
   exit 1
@@ -290,13 +354,18 @@ if [ "$failed_runs" -gt 0 ]; then
     --arg r "$RED" --arg z "$RESET" '
     .[] | select(.status == "completed" and (.conclusion | IN("success","skipped") | not)) |
     "  \($r)●\($z) \(.name) — \(.conclusion)  \(.html_url)"'
-  if [ "$ASSUME_YES" -eq 1 ]; then
-    error "Not triggering with --yes: CI did not pass."
+  if [ "$NO_PROMPT" -eq 1 ]; then
+    error "Not triggering: CI did not pass."
     exit 1
   fi
   read -r -p "$(printf '%sProceed to trigger %s anyway? (y/N) %s' "$YELLOW" "$WORKFLOW_NAME" "$RESET")" confirm
 else
   ok "All workflow runs and required checks passed."
+  if [ "$AGENT" -eq 1 ] && [ "$ASSUME_YES" -eq 0 ]; then
+    info "Dry run (agent mode): $WORKFLOW_NAME was not triggered on $BRANCH."
+    info "To trigger it, run: $YES_COMMAND"
+    exit 0
+  fi
   if [ "$ASSUME_YES" -eq 1 ]; then
     info "Triggering because of --yes."
     confirm=y
