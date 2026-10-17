@@ -145,6 +145,45 @@ trigger_and_wait() {
 printf '%sRepo%s %s  %sBranch%s %s\n' "$BOLD" "$RESET" "$REPO" "$BOLD" "$RESET" "$BRANCH"
 printf '%sCommit%s %s%s%s %s  %s(%s)%s\n' "$BOLD" "$RESET" "$YELLOW" "$SHORT_SHA" "$RESET" "$COMMIT_TITLE" "$DIM" "$COMMIT_AUTHOR" "$RESET"
 
+# --- local state ------------------------------------------------------------
+# Releasing with local commits not pushed would release the remote SHA without
+# them, then fail the final pull --ff-only: always refuse.
+# Uncommitted changes on the checked-out branch: prompt, or refuse when not prompting.
+check_nothing_left_to_push() {
+  git rev-parse --git-dir >/dev/null 2>&1 || return 0
+  git show-ref --verify --quiet "refs/heads/$BRANCH" || return 0
+
+  if ! git fetch --quiet origin "$BRANCH" || ! git cat-file -e "$SHA^{commit}" 2>/dev/null; then
+    warn "Unable to fetch $SHORT_SHA from origin: skipping unpushed commits check."
+  else
+    local unpushed
+    unpushed=$(git rev-list --count "$SHA..refs/heads/$BRANCH")
+    if [ "$unpushed" -gt 0 ]; then
+      error "$unpushed local commit(s) on $BRANCH not pushed to origin:"
+      git log --format='  %h %s' "$SHA..refs/heads/$BRANCH" >&2
+      error "Push them before releasing."
+      exit 1
+    fi
+  fi
+
+  [ "$(git branch --show-current 2>/dev/null || true)" = "$BRANCH" ] || return 0
+  local dirty
+  dirty=$(git status --porcelain)
+  [ -z "$dirty" ] && return 0
+  warn "Uncommitted changes on $BRANCH:"
+  printf '%s\n' "$dirty" | sed 's/^/  /' >&2
+  if [ "$ASSUME_YES" -eq 1 ] || [ "$AGENT" -eq 1 ]; then
+    error "Not triggering: commit and push them, or stash them, first."
+    exit 1
+  fi
+  read -r -p "$(printf '%sRelease without them? (y/N) %s' "$YELLOW" "$RESET")" confirm
+  case "$confirm" in
+    [yY][eE][sS]|[yY]) ;;
+    *) info "Aborted."; exit 0 ;;
+  esac
+}
+check_nothing_left_to_push
+
 if [ -n "$SKIP_CHECKS" ] && [ "$ASSUME_YES" -eq 1 ]; then
   error "--yes requires CI checks: refusing to combine it with SKIP_CHECKS."
   exit 2
