@@ -5,6 +5,8 @@ if [[ -n $SSH_CONNECTION ]]; then
   export EDITOR='nano'
 else
   export EDITOR='code --wait'
+  # better-opn (Expo, CRA) reuses a running Chrome via AppleScript unless BROWSER is set; "open" uses the system default browser
+  export BROWSER=open
 fi
 
 
